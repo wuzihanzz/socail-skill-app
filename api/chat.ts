@@ -24,7 +24,9 @@ export default async function handler(
   }
 
   try {
+    // System prompt must be the first message in OpenAI-compatible API
     const messages = [
+      { role: 'system', content: systemPrompt },
       ...conversationHistory,
       { role: 'user', content: userMessage },
     ];
@@ -38,7 +40,6 @@ export default async function handler(
       body: JSON.stringify({
         model: 'deepseek-v4-flash',
         max_tokens: 300,
-        system_prompt: systemPrompt,
         messages,
       }),
     });
