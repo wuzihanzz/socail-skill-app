@@ -11,7 +11,6 @@ import { generateTodayEvent } from '../engine/eventGenerator';
 import { calculateTrustDelta, isHarmfulMessage } from '../engine/trustEngine';
 import { sendMessage } from '../engine/claudeClient';
 import { generateConversationTips } from '../engine/conversationHelper';
-import './Chat.css';
 
 const Chat: React.FC = () => {
   const navigate = useNavigate();
@@ -234,64 +233,107 @@ const Chat: React.FC = () => {
   };
 
   return (
-    <div className="chat-page">
-      <header className="chat-header">
-        <button className="back-button" onClick={() => navigate('/characters')}>
+    <div className="flex flex-col h-screen w-full bg-white dark:bg-gray-900">
+      {/* Header - Responsive */}
+      <header className="flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 sticky top-0 z-10">
+        <button
+          onClick={() => navigate('/characters')}
+          className="flex-shrink-0 px-2 py-1 sm:px-3 sm:py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-sm sm:text-base transition"
+        >
           ← 返回
         </button>
-        <div className="header-info">
-          <h1>{character.nickname}</h1>
-          <p>在线中</p>
+
+        <div className="flex-1 min-w-0 text-center">
+          <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">
+            {character.nickname}
+          </h1>
+          <p className="text-xs sm:text-sm text-green-600 dark:text-green-400">在线中</p>
         </div>
-        <button className="profile-button" onClick={() => navigate('/profile')}>
-          档案 📋
+
+        <button
+          onClick={() => navigate('/profile')}
+          className="flex-shrink-0 px-2 py-1 sm:px-3 sm:py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-sm sm:text-base transition"
+        >
+          📋
         </button>
       </header>
 
-      <TrustBar
-        trustLevel={relationship.trustLevel}
-        satisfactionLevel={relationship.satisfactionLevel}
-      />
+      {/* Trust Bar */}
+      <div className="sticky top-[70px] sm:top-[80px] z-10 px-3 sm:px-6 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <TrustBar
+          trustLevel={relationship.trustLevel}
+          satisfactionLevel={relationship.satisfactionLevel}
+        />
+      </div>
 
-      <div className="chat-container">
-        <div className="avatar-container">
-          <PixelAvatar
-            characterId={character.id}
-            emotion={relationship.currentEmotion}
-            name={character.name}
-          />
-        </div>
-
-        <div className="messages-container">
-          {relationship.conversationHistory.length === 0 && (
-            <div className="first-message-hint">
-              <p>开始和{character.nickname}聊天吧！</p>
-              <small>你的回答会影响他/她对你的看法。</small>
-            </div>
-          )}
-
-          {relationship.conversationHistory.map((msg, idx) => (
-            <ChatBubble
-              key={idx}
-              role={msg.role}
-              content={msg.content}
-              characterName={msg.role === 'assistant' ? character.nickname : undefined}
+      {/* Chat Container - Main */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-y-auto flex flex-col items-center justify-start gap-4 sm:gap-6 px-3 sm:px-6 py-4 sm:py-6">
+          {/* Avatar */}
+          <div className="flex-shrink-0 mt-2 sm:mt-4">
+            <PixelAvatar
+              characterId={character.id}
+              emotion={relationship.currentEmotion}
+              name={character.name}
             />
-          ))}
+          </div>
 
-          {loading && (
-            <div className="loading-indicator">
-              <div className="spinner"></div>
-              <p>{character.nickname}正在思考...</p>
-            </div>
-          )}
+          {/* Messages */}
+          <div className="w-full max-w-2xl">
+            {relationship.conversationHistory.length === 0 && (
+              <div className="text-center py-8 sm:py-12">
+                <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-2">
+                  开始和{character.nickname}聊天吧！
+                </p>
+                <small className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
+                  你的回答会影响他/她对你的看法。
+                </small>
+              </div>
+            )}
 
-          <div ref={messagesEndRef} />
+            {relationship.conversationHistory.map((msg, idx) => (
+              <ChatBubble
+                key={idx}
+                role={msg.role}
+                content={msg.content}
+                characterName={msg.role === 'assistant' ? character.nickname : undefined}
+              />
+            ))}
+
+            {loading && (
+              <div className="flex flex-col items-center justify-center gap-3 py-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{character.nickname}正在思考...</p>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
         </div>
       </div>
 
-      <div className="input-container">
-        <div className="input-wrapper">
+      {/* Input Area - Fixed at Bottom */}
+      <div className="flex-shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 space-y-2 sm:space-y-3">
+        {/* Conversation Tips */}
+        {conversationTips.length > 0 && !loading && (
+          <div className="flex flex-col gap-1 sm:gap-2">
+            <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">💡 可以这样回复：</div>
+            <div className="flex flex-wrap gap-1 sm:gap-2">
+              {conversationTips.map((tip, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setInput(tip)}
+                  className="text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 transition truncate"
+                >
+                  {tip}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Input Box */}
+        <div className="flex gap-2 sm:gap-3">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -299,27 +341,16 @@ const Chat: React.FC = () => {
             placeholder={`对${character.nickname}说...`}
             disabled={loading}
             rows={3}
+            className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none disabled:opacity-50"
           />
           <button
             onClick={handleSendMessage}
             disabled={loading || !input.trim()}
-            className="send-button"
+            className="flex-shrink-0 px-3 sm:px-4 py-2 sm:py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition text-sm sm:text-base"
           >
             {loading ? '...' : '发送'}
           </button>
         </div>
-
-        {/* Conversation Tips */}
-        {conversationTips.length > 0 && !loading && (
-          <div className="conversation-tips">
-            <div className="tips-label">💡 可以这样回复：</div>
-            <div className="tips-list">
-              {conversationTips.map((tip, idx) => (
-                <span key={idx} className="tip-item">{tip}</span>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
