@@ -265,7 +265,7 @@ const Chat: React.FC = () => {
         <div className="messages-container">
           {relationship.conversationHistory.length === 0 && (
             <div className="first-message-hint">
-              <p>开始和{character.name}聊天吧！</p>
+              <p>开始和{character.nickname}聊天吧！</p>
               <small>你的回答会影响他/她对你的看法。</small>
             </div>
           )}
@@ -275,14 +275,14 @@ const Chat: React.FC = () => {
               key={idx}
               role={msg.role}
               content={msg.content}
-              characterName={msg.role === 'assistant' ? character.name : undefined}
+              characterName={msg.role === 'assistant' ? character.nickname : undefined}
             />
           ))}
 
           {loading && (
             <div className="loading-indicator">
               <div className="spinner"></div>
-              <p>{character.name}正在思考...</p>
+              <p>{character.nickname}正在思考...</p>
             </div>
           )}
 
