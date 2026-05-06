@@ -55,7 +55,7 @@ interface Store extends GameState {
   resetCharacterRelationship: (characterId: string) => void;
 }
 
-export const useGameStore = create<Store>((set, get) => ({
+export const useGameStore = create<Store>((set) => ({
   currentCharacterId: null,
   relationships: initializeRelationships(),
   conversationHistory: [],

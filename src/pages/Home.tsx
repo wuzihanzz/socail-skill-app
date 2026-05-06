@@ -1,6 +1,5 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Tip } from '../types/index';
 import tips from '../data/tips';
 import './Home.css';
 

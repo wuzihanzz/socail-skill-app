@@ -21,7 +21,6 @@ const Chat: React.FC = () => {
     addMessage,
     updateTrustLevel,
     setTodayEventTriggered,
-    unlockSkill,
     markAskedAbout,
   } = useGameStore();
 

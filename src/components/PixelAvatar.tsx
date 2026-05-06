@@ -10,7 +10,6 @@ interface PixelAvatarProps {
 const PixelAvatar: React.FC<PixelAvatarProps> = ({
   characterId,
   emotion,
-  name,
 }) => {
   // Lin Xue - Designer with purple hair (like Okami reference)
   if (characterId === 'lin-xue') {
