@@ -1,0 +1,50 @@
+.trust-bar-container {
+  display: flex;
+  gap: 20px;
+  padding: 16px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.trust-item {
+  flex: 1;
+}
+
+.trust-item .label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.trust-item .bar-bg {
+  width: 100%;
+  height: 12px;
+  background-color: #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.trust-item .bar-fill {
+  height: 100%;
+  transition: width 0.3s ease-in-out;
+  border-radius: 6px;
+}
+
+.trust-item .bar-fill.trust {
+  background: linear-gradient(to right, #4caf50, #8bc34a);
+}
+
+.trust-item .bar-fill.satisfaction {
+  background: linear-gradient(to right, #ff9800, #ffc107);
+}
+
+.trust-item .percentage {
+  font-size: 12px;
+  color: #999;
+  text-align: right;
+}

@@ -1,0 +1,305 @@
+.profile-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-header {
+  background: #fff;
+  padding: 16px 20px;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.profile-header h1 {
+  margin: 0;
+  font-size: 24px;
+  flex: 1;
+}
+
+.back-button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: #333;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.back-button:hover {
+  background: #f0f0f0;
+}
+
+.profile-container {
+  flex: 1;
+  display: flex;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  gap: 40px;
+  padding: 40px 20px;
+}
+
+/* Avatar Section */
+.profile-avatar-section {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  position: sticky;
+  top: 20px;
+  height: fit-content;
+}
+
+.avatar-container-profile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 200px;
+  height: 250px;
+  background: #fff;
+  border: 3px solid #333;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 0 auto;
+}
+
+.avatar-container-profile svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* Info Section */
+.profile-info-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.info-block {
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.info-block h3 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: #333;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 12px;
+}
+
+.nickname {
+  font-size: 28px;
+  color: #333;
+  margin: 0;
+  font-weight: bold;
+}
+
+.real-name {
+  margin: 12px 0 0 0;
+  font-size: 14px;
+  color: #666;
+}
+
+/* Info Grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-item label {
+  font-size: 12px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.info-item p {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+  font-weight: 500;
+}
+
+.text-locked {
+  font-size: 20px;
+  letter-spacing: 4px;
+  color: #999;
+  font-weight: bold;
+  font-family: monospace;
+}
+
+.text-unlocked {
+  color: #333;
+  font-weight: 500;
+}
+
+/* Skills List */
+.skills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skill-item {
+  padding: 12px;
+  background: #f9f9f9;
+  border-left: 3px solid #4CAF50;
+  border-radius: 4px;
+}
+
+.skill-item h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.skill-item p {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+}
+
+/* Notes Section */
+.notes-block {
+  margin-top: 12px;
+}
+
+.notes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.notes-header h3 {
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+.edit-button {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.edit-button:hover {
+  background: #e8e8e8;
+}
+
+/* Notes Editor */
+.notes-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.notes-editor textarea {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.notes-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.save-button,
+.cancel-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.save-button {
+  background: #4CAF50;
+  color: white;
+}
+
+.save-button:hover {
+  background: #45a049;
+}
+
+.cancel-button {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.cancel-button:hover {
+  background: #e8e8e8;
+}
+
+/* Notes Display */
+.notes-display {
+  padding: 12px;
+  background: #f9f9f9;
+  border-radius: 4px;
+  line-height: 1.6;
+}
+
+.notes-display p {
+  margin: 0;
+  color: #333;
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+.empty-state {
+  color: #999;
+  font-style: italic;
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .profile-container {
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .profile-avatar-section {
+    flex: none;
+    position: static;
+    width: 100%;
+  }
+
+  .avatar-container-profile {
+    width: 100%;
+  }
+
+  .info-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
