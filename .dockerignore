@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.gitignore
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.vscode
+.idea
+sd-local
+sample
+generate_avatars*.py
+DEPLOYMENT.md
+README*.md
