@@ -1,6 +1,15 @@
 {
   "buildCommand": "pnpm run build",
   "installCommand": "pnpm install",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "env": {
+    "SKIP_ENV_VALIDATION": "true"
+  },
+  "builds": [
+    {
+      "src": "api/**/*.ts",
+      "use": "@vercel/node"
+    }
+  ]
 }
 
