@@ -127,8 +127,35 @@ const Chat: React.FC = () => {
         }))
       );
 
+      // Parse JSON response from LLM
+      let message = '';
+      let satisfactionDelta = 3; // Default: neutral (2-4 range)
+
+      try {
+        const parsed = JSON.parse(aiResponse);
+        message = parsed.message;
+        satisfactionDelta = parsed.satisfactionDelta || 3;
+      } catch {
+        // Fallback: treat as plain text if not valid JSON
+        message = aiResponse;
+      }
+
+      // Map satisfactionDelta (2-4 range) to trust delta (-3 to +3)
+      const mappedLLMDelta = (satisfactionDelta - 3) * 3;
+
+      // Weighted combination: trustEngine 40% + LLM delta 60%
+      const finalTrustDelta = trustDelta * 0.4 + mappedLLMDelta * 0.6;
+
+      // Adjust emotion based on satisfaction level
+      let finalEmotion: 'neutral' | 'happy' | 'upset' = emotionChange;
+      if (satisfactionDelta === 4) {
+        finalEmotion = 'happy';
+      } else if (satisfactionDelta === 2) {
+        finalEmotion = 'upset';
+      }
+
       // Detect what information was revealed in AI response
-      const lowerResponse = aiResponse.toLowerCase();
+      const lowerResponse = message.toLowerCase();
       if (lowerResponse.includes(character.name)) {
         markAskedAbout(currentCharacterId, 'name');
       }
@@ -149,7 +176,7 @@ const Chat: React.FC = () => {
       }
 
       // Split response by \n\n to handle multiple short messages
-      const messageChunks = aiResponse
+      const messageChunks = message
         .split('\n\n')
         .map((chunk) => chunk.trim())
         .filter((chunk) => chunk.length > 0);
@@ -161,7 +188,7 @@ const Chat: React.FC = () => {
             role: 'assistant',
             content: chunk,
             timestamp: Date.now(),
-            trustDelta: index === 0 ? trustDelta : 0, // Only apply trustDelta to first message
+            trustDelta: index === 0 ? finalTrustDelta : 0, // Only apply trustDelta to first message
           });
         }, index * 300); // 300ms delay between each message
       });
@@ -169,7 +196,7 @@ const Chat: React.FC = () => {
       // Update trust level and clear loading state after all messages are added
       const totalDelay = messageChunks.length > 1 ? (messageChunks.length - 1) * 300 + 100 : 100;
       setTimeout(() => {
-        updateTrustLevel(currentCharacterId, trustDelta, emotionChange);
+        updateTrustLevel(currentCharacterId, finalTrustDelta, finalEmotion);
         // Generate conversation tips based on the last message chunk
         const lastMessage = messageChunks[messageChunks.length - 1];
         const tips = generateConversationTips(lastMessage);

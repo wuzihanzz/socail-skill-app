@@ -37,6 +37,20 @@ export const calculateTrustDelta = (
     return { trustDelta: -5, emotionChange: 'neutral' };
   }
 
+  // Disrespectful/rude language
+  if (
+    lowerMessage.includes('滚') ||
+    lowerMessage.includes('垃圾') ||
+    lowerMessage.includes('傻') ||
+    lowerMessage.includes('白痴') ||
+    lowerMessage.includes('烦') ||
+    lowerMessage.includes('讨厌') ||
+    lowerMessage.includes('你很') && (lowerMessage.includes('烦人') || lowerMessage.includes('无聊') || lowerMessage.includes('恶心'))
+  ) {
+    // Direct insult/rudeness
+    return { trustDelta: -12, emotionChange: 'upset' };
+  }
+
   // Positive signals (trust increase)
   if (
     lowerMessage.includes('我理解') ||
