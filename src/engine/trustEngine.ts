@@ -4,7 +4,7 @@
  */
 export const calculateTrustDelta = (
   userMessage: string,
-  aiResponse: string,
+  _aiResponse: string,
   isFirstMessage: boolean
 ): { trustDelta: number; emotionChange: 'neutral' | 'happy' | 'upset' } => {
   const lowerMessage = userMessage.toLowerCase();
