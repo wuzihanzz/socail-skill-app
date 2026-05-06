@@ -132,12 +132,24 @@ const Chat: React.FC = () => {
       let satisfactionDelta = 3; // Default: neutral (2-4 range)
 
       try {
-        const parsed = JSON.parse(aiResponse);
-        message = parsed.message;
+        // Try to extract JSON from markdown code blocks if present
+        let jsonStr = aiResponse;
+        const jsonMatch = aiResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[1];
+        }
+
+        const parsed = JSON.parse(jsonStr);
+        message = parsed.message || '';
         satisfactionDelta = parsed.satisfactionDelta || 3;
       } catch {
         // Fallback: treat as plain text if not valid JSON
         message = aiResponse;
+        // Try to extract just the message portion if it looks like failed JSON
+        const msgMatch = aiResponse.match(/"message"\s*:\s*"([^"]*?)"\s*[,}]/);
+        if (msgMatch) {
+          message = msgMatch[1];
+        }
       }
 
       // Map satisfactionDelta (2-4 range) to trust delta (-3 to +3)
