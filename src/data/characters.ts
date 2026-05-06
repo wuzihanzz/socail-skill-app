@@ -19,6 +19,18 @@ const characters: Character[] = [
       '用词谨慎，说话速度偏快。讲述案例时会详细展开。当压力大时会变得沉默。',
     skills: [
       {
+        id: 'nickname',
+        name: '网名',
+        description: '朋友们都叫我"熬夜的猫"，因为总是熬夜加班。',
+        triggers: ['名字', '网名', '昵称'],
+        eventPool: [],
+        alwaysVisible: true,
+        unlocksAt: {
+          trustThreshold: 0,
+          requiresQuestion: false,
+        },
+      },
+      {
         id: 'work-aholic',
         name: '工作狂倾向',
         description: '总在加班，工作压力巨大。经常吐槽案子和同事。',
@@ -104,6 +116,18 @@ const characters: Character[] = [
       '说话生动活泼，经常用表情符号。聊到设计时兴奋，聊到感情时语气变温柔。',
     skills: [
       {
+        id: 'nickname',
+        name: '网名',
+        description: '大家都叫我"彩色的梦想家"，因为我总是充满多彩的想象力。',
+        triggers: ['名字', '网名', '昵称'],
+        eventPool: [],
+        alwaysVisible: true,
+        unlocksAt: {
+          trustThreshold: 0,
+          requiresQuestion: false,
+        },
+      },
+      {
         id: 'creative-mind',
         name: '创意天才',
         description: '热爱设计，对美学有独到见解。',
@@ -182,6 +206,18 @@ const characters: Character[] = [
     speakingStyle:
       '说话温和有礼，用词都很周到。提到家乡时会露出温暖的笑容。累的时候会变得沉默。',
     skills: [
+      {
+        id: 'nickname',
+        name: '网名',
+        description: '大家叫我"温暖的小天使"，我觉得这个名字挺贴切的。',
+        triggers: ['名字', '网名', '昵称'],
+        eventPool: [],
+        alwaysVisible: true,
+        unlocksAt: {
+          trustThreshold: 0,
+          requiresQuestion: false,
+        },
+      },
       {
         id: 'caregiver',
         name: '照顾者',
