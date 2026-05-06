@@ -1,4 +1,6 @@
 {
-  "packageManager": "pnpm@9.1.0"
+  "buildCommand": "pnpm run build",
+  "installCommand": "pnpm install",
+  "outputDirectory": "dist"
 }
 
