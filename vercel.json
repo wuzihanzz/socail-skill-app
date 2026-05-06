@@ -1,8 +1,5 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "env": {
-    "ANTHROPIC_API_KEY": "@anthropic_api_key",
-    "ANTHROPIC_BASE_URL": "@anthropic_base_url"
-  }
+  "outputDirectory": "dist"
 }
+
