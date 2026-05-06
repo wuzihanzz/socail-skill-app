@@ -16,11 +16,10 @@ export default async function handler(
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const baseURL = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
+  const apiKey = process.env.DEEPSEEK_API_KEY;
 
   if (!apiKey) {
-    console.error('ANTHROPIC_API_KEY is not set');
+    console.error('DEEPSEEK_API_KEY is not set');
     return res.status(500).json({ error: 'Server configuration error' });
   }
 
@@ -30,40 +29,39 @@ export default async function handler(
       { role: 'user', content: userMessage },
     ];
 
-    const response = await fetch(`${baseURL}/v1/messages`, {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5',
+        model: 'deepseek-v4-flash',
         max_tokens: 300,
-        system: systemPrompt,
+        system_prompt: systemPrompt,
         messages,
       }),
     });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      console.error('Claude API error:', error);
+      console.error('DeepSeek API error:', error);
       return res.status(response.status).json({
-        error: `Claude API error: ${response.status}`,
+        error: `DeepSeek API error: ${response.status}`,
         details: error,
       });
     }
 
     const data = await response.json();
-    const content = data.content?.[0];
+    const content = data.choices?.[0]?.message?.content;
 
-    if (content?.type === 'text') {
-      return res.status(200).json({ text: content.text });
+    if (content) {
+      return res.status(200).json({ text: content });
     }
 
-    return res.status(500).json({ error: 'Unexpected response format from Claude API' });
+    return res.status(500).json({ error: 'Unexpected response format from DeepSeek API' });
   } catch (error) {
-    console.error('Error calling Claude API:', error);
+    console.error('Error calling DeepSeek API:', error);
     return res.status(500).json({
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error',
