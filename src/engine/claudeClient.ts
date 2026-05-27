@@ -1,107 +1,69 @@
-// Call backend API (for production) or direct API (for local development)
 export const sendMessage = async (
   systemPrompt: string,
   userMessage: string,
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<string> => {
-  // Check if we're in development with local API key
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  const isLocalDev = apiKey && import.meta.env.MODE === 'development';
+  const localKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
 
-  if (isLocalDev) {
-    // Direct API call for local development only
-    return sendMessageDirect(systemPrompt, userMessage, conversationHistory);
-  } else {
-    // Backend API call for production
-    return sendMessageViaBackend(systemPrompt, userMessage, conversationHistory);
+  if (localKey && import.meta.env.MODE === 'development') {
+    return sendMessageDeepSeekDirect(systemPrompt, userMessage, conversationHistory, localKey);
   }
+  return sendMessageViaBackend(systemPrompt, userMessage, conversationHistory);
 };
 
-// Direct API call (local development only with .env.local)
-const sendMessageDirect = async (
+const sendMessageDeepSeekDirect = async (
   systemPrompt: string,
   userMessage: string,
-  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  apiKey: string
 ): Promise<string> => {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  const baseURL = import.meta.env.VITE_ANTHROPIC_BASE_URL;
-
-  if (!apiKey) {
-    throw new Error('VITE_ANTHROPIC_API_KEY is not set');
-  }
-
-  const url = `${baseURL || 'https://api.anthropic.com'}/v1/messages`;
-
   const messages = [
+    { role: 'system', content: systemPrompt },
     ...conversationHistory,
-    { role: 'user' as const, content: userMessage },
+    { role: 'user', content: userMessage },
   ];
 
-  const response = await fetch(url, {
+  const response = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5',
+      model: 'deepseek-v4-flash',
       max_tokens: 300,
-      system: systemPrompt,
       messages,
     }),
   });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(
-      `API Error: ${response.status} - ${JSON.stringify(error)}`
-    );
+    throw new Error(`DeepSeek API Error: ${response.status} - ${JSON.stringify(error)}`);
   }
 
-  const data = await response.json();
-  const content = data.content?.[0];
-
-  if (content?.type === 'text') {
-    return content.text;
-  }
-
-  throw new Error('Unexpected response format from Claude API');
+  const data = await response.json() as any;
+  const content = data.choices?.[0]?.message?.content;
+  if (content) return content;
+  throw new Error('Unexpected response format from DeepSeek API');
 };
 
-// Backend API call (production deployment)
 const sendMessageViaBackend = async (
   systemPrompt: string,
   userMessage: string,
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<string> => {
-  const apiEndpoint = '/api/chat';
-
-  const response = await fetch(apiEndpoint, {
+  const response = await fetch('/api/chat', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      systemPrompt,
-      userMessage,
-      conversationHistory,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ systemPrompt, userMessage, conversationHistory }),
   });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(
-      `API Error: ${response.status} - ${JSON.stringify(error)}`
-    );
+    throw new Error(`API Error: ${response.status} - ${JSON.stringify(error)}`);
   }
 
   const data = await response.json();
-
-  if (data.text) {
-    return data.text;
-  }
-
+  if (data.text) return data.text;
   throw new Error('Unexpected response format from API');
 };
-

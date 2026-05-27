@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import characters from '../data/characters';
 import { useGameStore } from '../store/gameStore';
 import PixelAvatar from '../components/PixelAvatar';
-import TrustBar from '../components/TrustBar';
 import ChatBubble from '../components/ChatBubble';
 import { buildSystemPrompt } from '../engine/promptBuilder';
 import { getUnlockedSkills, getHiddenSkills } from '../engine/skillEngine';
@@ -29,90 +28,46 @@ const Chat: React.FC = () => {
   const [conversationTips, setConversationTips] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  if (!currentCharacterId) {
-    return <div>Loading...</div>;
-  }
+  const character = currentCharacterId ? characters.find((c) => c.id === currentCharacterId) : null;
+  const relationship = currentCharacterId ? relationships[currentCharacterId] : null;
 
-  const character = characters.find((c) => c.id === currentCharacterId);
-  const relationship = relationships[currentCharacterId];
-
-  if (!character || !relationship) {
-    return <div>Character not found</div>;
-  }
-
-  // Generate today's event on first load
+  // All hooks BEFORE any early returns
   useEffect(() => {
+    if (!character || !relationship || !currentCharacterId) return;
     if (!relationship.todayEventTriggered && !todayEvent) {
-      const event = generateTodayEvent(
-        character,
-        relationship.lastDailyEvent,
-        relationship.todayEventTriggered
-      );
+      const event = generateTodayEvent(character, relationship.lastDailyEvent, relationship.todayEventTriggered);
       if (event) {
         setTodayEvent(event);
         setTodayEventTriggered(currentCharacterId, true);
       }
     }
-  }, []);
+  }, [character?.id]);
 
-  // Auto-scroll to bottom whenever messages change
   useEffect(() => {
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 0);
-  }, [relationship.conversationHistory, loading]);
+    if (!relationship) return;
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 0);
+  }, [relationship?.conversationHistory, loading]);
 
-  const handleSendMessage = async () => {
+  if (!currentCharacterId) return <div className="p-4 text-center text-gray-500">Loading...</div>;
+  if (!character || !relationship) return <div className="p-4 text-center text-gray-500">Character not found</div>;
+
+  const handleSend = async () => {
     if (!input.trim() || loading) return;
-
     const userMessage = input.trim();
     setInput('');
 
-    // Add user message to state
-    addMessage(currentCharacterId, {
-      role: 'user',
-      content: userMessage,
-      timestamp: Date.now(),
-    });
+    addMessage(currentCharacterId, { role: 'user', content: userMessage, timestamp: Date.now() });
 
-    // Check for harmful messages
     if (isHarmfulMessage(userMessage)) {
-      addMessage(currentCharacterId, {
-        role: 'assistant',
-        content: '...我需要一些时间。也许我们改天再聊？',
-        timestamp: Date.now(),
-      });
+      addMessage(currentCharacterId, { role: 'assistant', content: '...我需要一些时间。也许我们改天再聊？', timestamp: Date.now() });
       updateTrustLevel(currentCharacterId, -15, 'upset');
       return;
     }
 
-    // Calculate trust delta
-    const { trustDelta, emotionChange } = calculateTrustDelta(
-      userMessage,
-      '',
-      !relationship.firstMessageSent
-    );
-
-    // Build system prompt
-    const unlockedSkills = getUnlockedSkills(
-      character,
-      relationship.trustLevel,
-      relationship.unlockedSkills
-    );
-    const hiddenSkills = getHiddenSkills(
-      character,
-      relationship.trustLevel,
-      relationship.unlockedSkills
-    );
-
-    const systemPrompt = buildSystemPrompt(
-      character,
-      relationship.trustLevel + trustDelta,
-      unlockedSkills,
-      hiddenSkills,
-      todayEvent,
-      emotionChange
-    );
+    const { trustDelta, emotionChange } = calculateTrustDelta(userMessage, '', !relationship.firstMessageSent);
+    const unlockedSkills = getUnlockedSkills(character, relationship.trustLevel, relationship.unlockedSkills);
+    const hiddenSkills = getHiddenSkills(character, relationship.trustLevel, relationship.unlockedSkills);
+    const systemPrompt = buildSystemPrompt(character, relationship.trustLevel + trustDelta, unlockedSkills, hiddenSkills, todayEvent, emotionChange);
 
     setLoading(true);
 
@@ -120,210 +75,158 @@ const Chat: React.FC = () => {
       const aiResponse = await sendMessage(
         systemPrompt,
         userMessage,
-        relationship.conversationHistory.map((m) => ({
-          role: m.role,
-          content: m.content,
-        }))
+        relationship.conversationHistory.map((m) => ({ role: m.role, content: m.content }))
       );
 
-      // Parse JSON response from LLM
-      let message = '';
-      let satisfactionDelta = 3; // Default: neutral (2-4 range)
+      let chunks: string[] = [];
+      let satisfactionDelta = 3;
 
       try {
-        // Try to extract JSON from markdown code blocks if present
         let jsonStr = aiResponse;
         const jsonMatch = aiResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-        if (jsonMatch) {
-          jsonStr = jsonMatch[1];
-        }
-
+        if (jsonMatch) jsonStr = jsonMatch[1];
         const parsed = JSON.parse(jsonStr);
-        message = parsed.message || '';
-        satisfactionDelta = parsed.satisfactionDelta || 3;
-      } catch {
-        // Fallback: treat as plain text if not valid JSON
-        message = aiResponse;
-        // Try to extract just the message portion if it looks like failed JSON
-        const msgMatch = aiResponse.match(/"message"\s*:\s*"([^"]*?)"\s*[,}]/);
-        if (msgMatch) {
-          message = msgMatch[1];
+        satisfactionDelta = parsed.satisfactionDelta ?? 3;
+        if (Array.isArray(parsed.messages)) {
+          chunks = parsed.messages.map((s: string) => s.trim()).filter(Boolean);
+        } else if (parsed.message) {
+          chunks = parsed.message.split('\n\n').map((s: string) => s.trim()).filter(Boolean);
         }
+      } catch {
+        chunks = [aiResponse];
       }
+      if (chunks.length === 0) chunks = [aiResponse];
 
-      // Map satisfactionDelta (2-4 range) to trust delta (-3 to +3)
-      const mappedLLMDelta = (satisfactionDelta - 3) * 3;
-
-      // Weighted combination: trustEngine 40% + LLM delta 60%
+      // Map satisfactionDelta (1-5) to trust delta: 3=neutral, each step ±4
+      const mappedLLMDelta = (satisfactionDelta - 3) * 4;
       const finalTrustDelta = trustDelta * 0.4 + mappedLLMDelta * 0.6;
-
-      // Adjust emotion based on satisfaction level
       let finalEmotion: 'neutral' | 'happy' | 'upset' = emotionChange;
-      if (satisfactionDelta === 4) {
-        finalEmotion = 'happy';
-      } else if (satisfactionDelta === 2) {
-        finalEmotion = 'upset';
-      }
+      if (satisfactionDelta >= 4) finalEmotion = 'happy';
+      else if (satisfactionDelta <= 2) finalEmotion = 'upset';
 
-      // Detect what information was revealed in AI response
-      const lowerResponse = message.toLowerCase();
-      if (lowerResponse.includes(character.name)) {
-        markAskedAbout(currentCharacterId, 'name');
-      }
-      if (lowerResponse.includes(character.mbti)) {
-        markAskedAbout(currentCharacterId, 'mbti');
-      }
-      if (
-        lowerResponse.includes(character.zodiac) ||
-        lowerResponse.includes(character.zodiac.replace(/♊|♏|♍/g, ''))
-      ) {
-        markAskedAbout(currentCharacterId, 'zodiac');
-      }
-      if (lowerResponse.includes(character.age.toString())) {
-        markAskedAbout(currentCharacterId, 'age');
-      }
-      if (lowerResponse.includes(character.job)) {
-        markAskedAbout(currentCharacterId, 'job');
-      }
-
-      // Split response by \n\n to handle multiple short messages
-      const messageChunks = message
-        .split('\n\n')
-        .map((chunk) => chunk.trim())
-        .filter((chunk) => chunk.length > 0);
-
-      // Add each message chunk separately with a small delay for natural feel
-      messageChunks.forEach((chunk, index) => {
+      const fullText = chunks.join(' ').toLowerCase();
+      if (fullText.includes(character.name)) markAskedAbout(currentCharacterId, 'name');
+      if (fullText.includes(character.mbti)) markAskedAbout(currentCharacterId, 'mbti');
+      if (fullText.includes(character.zodiac) || fullText.includes(character.zodiac.replace(/♊|♏|♍/g, ''))) markAskedAbout(currentCharacterId, 'zodiac');
+      if (fullText.includes(character.age.toString())) markAskedAbout(currentCharacterId, 'age');
+      if (fullText.includes(character.job)) markAskedAbout(currentCharacterId, 'job');
+      chunks.forEach((chunk, i) => {
         setTimeout(() => {
-          addMessage(currentCharacterId, {
-            role: 'assistant',
-            content: chunk,
-            timestamp: Date.now(),
-            trustDelta: index === 0 ? finalTrustDelta : 0, // Only apply trustDelta to first message
-          });
-        }, index * 300); // 300ms delay between each message
+          addMessage(currentCharacterId, { role: 'assistant', content: chunk, timestamp: Date.now(), trustDelta: i === 0 ? finalTrustDelta : 0 });
+        }, i * 300);
       });
 
-      // Update trust level and clear loading state after all messages are added
-      const totalDelay = messageChunks.length > 1 ? (messageChunks.length - 1) * 300 + 100 : 100;
+      const totalDelay = chunks.length > 1 ? (chunks.length - 1) * 300 + 100 : 100;
       setTimeout(() => {
         updateTrustLevel(currentCharacterId, finalTrustDelta, finalEmotion);
-        // Generate conversation tips based on the last message chunk
-        const lastMessage = messageChunks[messageChunks.length - 1];
-        const tips = generateConversationTips(lastMessage);
-        setConversationTips(tips);
+        setConversationTips(generateConversationTips(chunks[chunks.length - 1]));
         setLoading(false);
       }, totalDelay);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      addMessage(currentCharacterId, {
-        role: 'assistant',
-        content: '抱歉，我遇到了一些问题。可以再试一次吗？',
-        timestamp: Date.now(),
-      });
+    } catch (err) {
+      console.error(err);
+      addMessage(currentCharacterId, { role: 'assistant', content: '抱歉，我遇到了一些问题。可以再试一次吗？', timestamp: Date.now() });
       setLoading(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  return (
-    <div className="flex flex-col h-screen w-full bg-white dark:bg-gray-900">
-      {/* Header - Responsive */}
-      <header className="flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 sticky top-0 z-10">
-        <button
-          onClick={() => navigate('/characters')}
-          className="flex-shrink-0 px-2 py-1 sm:px-3 sm:py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-sm sm:text-base transition"
-        >
-          ← 返回
-        </button>
+  const trustLevel = relationship.trustLevel;
+  const trustLabel = trustLevel < 30 ? '陌生人' : trustLevel < 50 ? '认识' : trustLevel < 70 ? '信任' : '非常信任';
 
-        <div className="flex-1 min-w-0 text-center">
-          <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">
-            {character.nickname}
-          </h1>
-          <p className="text-xs sm:text-sm text-green-600 dark:text-green-400">在线中</p>
+  return (
+    <div className="flex flex-col h-screen bg-gray-50 max-w-2xl mx-auto w-full">
+      {/* ── Header ── */}
+      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 pt-3 pb-0">
+        <div className="flex items-center gap-3 mb-3">
+          <button
+            onClick={() => navigate('/characters')}
+            className="text-purple-600 text-sm font-medium px-2 py-1 rounded-lg hover:bg-purple-50 active:scale-95 transition-all flex-shrink-0"
+          >
+            ← 返回
+          </button>
+
+          {/* Avatar */}
+          <div className="flex-shrink-0 w-10 h-12 overflow-hidden">
+            <PixelAvatar characterId={character.id} emotion={relationship.currentEmotion} name={character.name} />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-gray-900 text-sm truncate">{character.nickname}</div>
+            <div className="text-xs text-green-500">在线中</div>
+          </div>
+
+          <button
+            onClick={() => navigate('/profile')}
+            className="flex-shrink-0 text-xl px-2 py-1 rounded-lg hover:bg-gray-100 active:scale-95 transition-all"
+            title="查看档案"
+          >
+            📋
+          </button>
         </div>
 
-        <button
-          onClick={() => navigate('/profile')}
-          className="flex-shrink-0 px-2 py-1 sm:px-3 sm:py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-sm sm:text-base transition"
-        >
-          📋
-        </button>
-      </header>
-
-      {/* Trust Bar */}
-      <div className="sticky top-[70px] sm:top-[80px] z-10 px-3 sm:px-6 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <TrustBar
-          trustLevel={relationship.trustLevel}
-          satisfactionLevel={relationship.satisfactionLevel}
-        />
-      </div>
-
-      {/* Chat Container - Main */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-y-auto flex flex-col items-center justify-start gap-4 sm:gap-6 px-3 sm:px-6 py-4 sm:py-6">
-          {/* Avatar */}
-          <div className="flex-shrink-0 mt-2 sm:mt-4">
-            <PixelAvatar
-              characterId={character.id}
-              emotion={relationship.currentEmotion}
-              name={character.name}
+        {/* Trust bar — slim strip at bottom of header */}
+        <div className="flex items-center gap-2 pb-2">
+          <span className="text-xs text-gray-400 flex-shrink-0 w-12">信任度</span>
+          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-purple-400 to-indigo-500 rounded-full transition-all duration-500"
+              style={{ width: `${trustLevel}%` }}
             />
           </div>
-
-          {/* Messages */}
-          <div className="w-full max-w-2xl">
-            {relationship.conversationHistory.length === 0 && (
-              <div className="text-center py-8 sm:py-12">
-                <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  开始和{character.nickname}聊天吧！
-                </p>
-                <small className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
-                  你的回答会影响他/她对你的看法。
-                </small>
-              </div>
-            )}
-
-            {relationship.conversationHistory.map((msg, idx) => (
-              <ChatBubble
-                key={idx}
-                role={msg.role}
-                content={msg.content}
-                characterName={msg.role === 'assistant' ? character.nickname : undefined}
-              />
-            ))}
-
-            {loading && (
-              <div className="flex flex-col items-center justify-center gap-3 py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">{character.nickname}正在思考...</p>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
+          <span className="text-xs text-gray-400 flex-shrink-0 w-16 text-right">{trustLevel.toFixed(2)}% · {trustLabel}</span>
         </div>
+      </header>
+
+      {/* ── Messages ── */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+        {relationship.conversationHistory.length === 0 && (
+          <div className="text-center py-12">
+            <div className="w-20 h-24 mx-auto mb-4">
+              <PixelAvatar characterId={character.id} emotion="neutral" name={character.name} />
+            </div>
+            <p className="text-sm font-medium text-gray-700 mb-1">开始和{character.nickname}聊天吧！</p>
+            <p className="text-xs text-gray-400">你的回答会影响他/她对你的看法</p>
+          </div>
+        )}
+
+        {relationship.conversationHistory.map((msg, idx) => (
+          <ChatBubble
+            key={idx}
+            role={msg.role}
+            content={msg.content}
+            characterName={msg.role === 'assistant' ? character.nickname : undefined}
+          />
+        ))}
+
+        {loading && (
+          <div className="flex items-center gap-2 px-1 py-2">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+            </div>
+            <span className="text-xs text-gray-400">{character.nickname}正在思考…</span>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area - Fixed at Bottom */}
-      <div className="flex-shrink-0 px-3 sm:px-6 py-3 sm:py-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 space-y-2 sm:space-y-3">
-        {/* Conversation Tips */}
+      {/* ── Input area ── */}
+      <div className="flex-shrink-0 bg-white border-t border-gray-200 px-4 pt-3 pb-safe pb-4 space-y-2">
+        {/* Quick reply tips */}
         {conversationTips.length > 0 && !loading && (
-          <div className="flex flex-col gap-1 sm:gap-2">
-            <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">💡 可以这样回复：</div>
-            <div className="flex flex-wrap gap-1 sm:gap-2">
-              {conversationTips.map((tip, idx) => (
+          <div className="space-y-1">
+            <p className="text-xs text-gray-400 font-medium">💡 试试这样回复：</p>
+            <div className="flex flex-wrap gap-1.5">
+              {conversationTips.map((tip, i) => (
                 <button
-                  key={idx}
+                  key={i}
                   onClick={() => setInput(tip)}
-                  className="text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 transition truncate"
+                  className="text-xs px-3 py-1.5 bg-purple-50 text-purple-600 rounded-full border border-purple-100 hover:bg-purple-100 active:scale-95 transition-all truncate max-w-[200px]"
                 >
                   {tip}
                 </button>
@@ -332,23 +235,29 @@ const Chat: React.FC = () => {
           </div>
         )}
 
-        {/* Input Box */}
-        <div className="flex gap-2 sm:gap-3">
+        {/* Textarea + send */}
+        <div className="flex gap-2 items-end">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={`对${character.nickname}说...`}
+            onKeyDown={handleKey}
+            placeholder={`对${character.nickname}说…`}
             disabled={loading}
-            rows={3}
-            className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none disabled:opacity-50"
+            rows={2}
+            className="flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent disabled:opacity-50 transition-all"
           />
           <button
-            onClick={handleSendMessage}
+            onClick={handleSend}
             disabled={loading || !input.trim()}
-            className="flex-shrink-0 px-3 sm:px-4 py-2 sm:py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition text-sm sm:text-base"
+            className="flex-shrink-0 h-10 w-10 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:bg-gray-200 text-white flex items-center justify-center active:scale-95 transition-all"
           >
-            {loading ? '...' : '发送'}
+            {loading ? (
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M22 2L11 13" /><path d="M22 2L15 22l-4-9-9-4 20-7z" />
+              </svg>
+            )}
           </button>
         </div>
       </div>

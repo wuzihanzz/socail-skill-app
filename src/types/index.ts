@@ -13,12 +13,49 @@ export interface Skill {
   };
 }
 
+// Family background influencing personality
+export interface FamilyBackground {
+  wealth: 'poor' | 'working-class' | 'middle-class' | 'wealthy' | 'rich';
+  parentalAttitude: 'warm' | 'strict' | 'absent' | 'controlling' | 'supportive';
+  growthEnvironment: 'rural' | 'small-town' | 'suburban' | 'urban';
+  siblingCount: number; // 0 = only child
+  keyFormativeEvent?: string; // one sentence, shapes core wound or strength
+}
+
+// What venues/scenes a character will naturally appear in
+export interface VenuePreferences {
+  frequents: VenueType[];   // places they go regularly
+  avoids: VenueType[];      // places they won't go
+  reason?: string;          // brief note on why
+}
+
+export type VenueType =
+  | 'bar'
+  | 'cafe'
+  | 'restaurant'
+  | 'gym'
+  | 'park'
+  | 'bookstore'
+  | 'art-gallery'
+  | 'club'
+  | 'library'
+  | 'office-pantry';
+
+// Derived social tendencies (computed from family + personality, stored for prompt use)
+export interface SocialTendency {
+  extroversion: 1 | 2 | 3 | 4 | 5; // 1=very introverted, 5=very extroverted
+  trustsEasily: boolean;
+  conflictStyle: 'avoids' | 'confronts' | 'deflects';
+  attachmentStyle: 'secure' | 'anxious' | 'avoidant';
+  drinkingHabit: 'never' | 'rarely' | 'socially' | 'regularly';
+}
+
 // Character Definition
 export interface Character {
   id: string;
   name: string;
-  nickname: string; // Random username
-  signature?: string; // Personal signature/bio
+  nickname: string;
+  signature?: string;
   nameEn: string;
   mbti: string;
   zodiac: string;
@@ -28,9 +65,12 @@ export interface Character {
   background: string;
   personality: string;
   speakingStyle: string;
+  familyBackground: FamilyBackground;
+  venuePreferences: VenuePreferences;
+  socialTendency: SocialTendency;
   skills: Skill[];
   pixelAvatar: {
-    neutral: string; // SVG data or component
+    neutral: string;
     happy: string;
     upset: string;
   };

@@ -84,6 +84,25 @@ const characters: Character[] = [
         },
       },
     ],
+    familyBackground: {
+      wealth: 'middle-class',
+      parentalAttitude: 'controlling',
+      growthEnvironment: 'urban',
+      siblingCount: 0,
+      keyFormativeEvent: '父亲替他填了志愿，从此他把"成功"当成还债。',
+    },
+    venuePreferences: {
+      frequents: ['office-pantry', 'cafe', 'restaurant'],
+      avoids: ['bar', 'club'],
+      reason: '不喝酒，觉得夜场嘈杂浪费时间，深夜更愿意一个人待着。',
+    },
+    socialTendency: {
+      extroversion: 2,
+      trustsEasily: false,
+      conflictStyle: 'deflects',
+      attachmentStyle: 'avoidant',
+      drinkingHabit: 'never',
+    },
     pixelAvatar: {
       neutral: 'neutral',
       happy: 'happy',
@@ -181,6 +200,25 @@ const characters: Character[] = [
         },
       },
     ],
+    familyBackground: {
+      wealth: 'working-class',
+      parentalAttitude: 'warm',
+      growthEnvironment: 'small-town',
+      siblingCount: 1,
+      keyFormativeEvent: '高中时画的一幅画被老师撕掉，她偷偷哭了一晚上，然后画得更好了。',
+    },
+    venuePreferences: {
+      frequents: ['cafe', 'art-gallery', 'bookstore', 'restaurant'],
+      avoids: ['gym', 'library'],
+      reason: '喜欢有美感和创意氛围的地方，偶尔喝点酒放松，不去嘈杂夜场。',
+    },
+    socialTendency: {
+      extroversion: 4,
+      trustsEasily: true,
+      conflictStyle: 'avoids',
+      attachmentStyle: 'anxious',
+      drinkingHabit: 'socially',
+    },
     pixelAvatar: {
       neutral: 'neutral',
       happy: 'happy',
@@ -272,6 +310,25 @@ const characters: Character[] = [
         },
       },
     ],
+    familyBackground: {
+      wealth: 'poor',
+      parentalAttitude: 'warm',
+      growthEnvironment: 'rural',
+      siblingCount: 2,
+      keyFormativeEvent: '父亲生病那年，她一边备考一边打工，高考后第一件事是把奖学金寄回家。',
+    },
+    venuePreferences: {
+      frequents: ['cafe', 'park', 'restaurant'],
+      avoids: ['bar', 'club', 'art-gallery'],
+      reason: '不喝酒，不习惯喧嚣场合，喜欢安静能聊天的地方。',
+    },
+    socialTendency: {
+      extroversion: 2,
+      trustsEasily: true,
+      conflictStyle: 'avoids',
+      attachmentStyle: 'secure',
+      drinkingHabit: 'never',
+    },
     pixelAvatar: {
       neutral: 'neutral',
       happy: 'happy',

@@ -1,261 +1,179 @@
-# 社交技能修炼 🚀
+# 社交技能修炼
 
-> 通过和真实的AI角色聊天，学习如何更好地与他人沟通。
+> 通过和 AI 角色聊天，练习如何更好地与人沟通。
 
-一个创新的社交技能学习平台，结合**像素艺术头像**、**信任度系统**和**AI角色扮演**，让用户在真实的对话中提升社交能力。
+一个基于对话的社交练习应用。每个虚拟角色都有独立的成长背景、性格与社交倾向，你的沟通方式会影响他们对你的态度。
 
-![社交技能修炼](https://img.shields.io/badge/Status-Active-green) ![React](https://img.shields.io/badge/React-19-blue) ![Vite](https://img.shields.io/badge/Vite-8-purple) ![TypeScript](https://img.shields.io/badge/TypeScript-6-blue)
+![Status](https://img.shields.io/badge/Status-Active-green) ![React](https://img.shields.io/badge/React-19-blue) ![Vite](https://img.shields.io/badge/Vite-8-purple) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
+
+**线上地址**：[socail-skill-app.vercel.app](https://socail-skill-app-nlaw.vercel.app)
 
 ---
 
-## ✨ 核心特性
+## 功能
 
-### 📚 社交技巧中心
-- 10+条精心设计的社交技巧卡片
-- 分类覆盖：主动倾听、同理心、冲突化解、表达感谢、读懂情绪
-- 每条技巧配有真实场景示例
+### AI 角色对话
 
-### 🎭 AI角色聊天
-与三个各具特色的虚拟角色进行深度对话：
+三个有完整背景故事的角色，不是简单的聊天机器人：
 
-| 角色 | 职业 | 性格 | 特点 |
+| 角色 | 职业 | MBTI | 特点 |
 |------|------|------|------|
-| **陈威** 🧑‍⚖️ | 律师 | INFP | 工作狂、家庭压力、深层不安全感 |
-| **林雪** 👩‍🎨 | 设计师 | ENFP | 创意天才、感情焦虑、完美主义 |
-| **小美** 👩‍⚕️ | 护士 | ISFJ | 照顾者、隐藏梦想、思乡情结 |
+| **陈威**（熬夜的猫） | 律师 | INFP | 中产独生子，父母控制欲强，工作狂，不喝酒 |
+| **林雪**（晚风知我） | 设计师 | ENFP | 工薪家庭，从小城镇来，社交场合偶尔喝酒 |
+| **小美**（人间烟火） | 护士 | ISFJ | 农村出身，家境贫困，温暖父母，从不喝酒 |
 
-### 💫 智能信任系统
-- **动态信任度**：根据用户的表达质量实时调整（范围 0%-100%）
-- **情绪反馈**：角色根据对话质量改变表情（开心 😊 / 中立 😐 / 不满 😠）
-- **技能解锁**：达到信任度阈值，解锁角色的深层故事和心理状态
-- **加权判断**：结合keyword分析（40%）和LLM判断（60%）
+每个角色都有：
+- **家庭背景**：出身、父母态度、成长环境、关键经历
+- **社交特质**：外向程度、冲突处理方式、依恋风格、饮酒习惯
+- **隐藏信息**：随信任度逐步解锁的深层故事
 
-### 🎨 像素艺术风格
-- **CSS纯手绘**的像素头像，每个字符16×16像素网格
-- **三种表情状态**：neutral（中立）、happy（开心）、upset（不满）
-- **平滑动画过渡**，增强视觉反馈
+### 信任系统
 
-### 🎯 对话建议系统
-- 实时分析AI角色的最后一条消息
-- 生成3条**情景式建议**，帮助用户选择更好的回应
-- 无需思考，直接学习有效的沟通技巧
+- 信任度范围 0–100%，根据你的沟通质量实时变化
+- 加权计算：关键词分析（40%）+ AI 判断（60%）
+- `satisfactionDelta` 1–5 反映角色的实际感受（1=冒犯，3=正常，5=感动）
+- 角色有底线：贬低、冷嘲热讽会引发真实反弹，不是无限包容的树洞
 
-### 💾 本地进度保存
-- 所有角色的对话历史、信任度、已解锁技能存储在浏览器localStorage
-- 关闭网站后，下次打开时进度完整保留
+### 对话机制
 
----
+- AI 回复以**短句数组**形式返回，逐条展示，模拟真实聊天节奏
+- 角色情绪（neutral / happy / upset）影响回复风格
+- 每日随机事件系统，让角色有当天的心情背景
+- 对话建议：实时分析 AI 最后一条消息，推荐 3 条回复思路
 
-## 🛠 技术栈
+### 其他
 
-### 前端
-- **React 19** - UI框架
-- **Vite 8** - 极速构建工具
-- **TypeScript 6** - 类型安全
-- **React Router 7** - 页面路由
-- **Zustand 5** - 轻量级状态管理
-- **CSS Modules** - 作用域样式
-
-### 后端/AI
-- **Vercel Functions** - 无服务器后端
-- **DeepSeek API (v4-flash)** - AI对话引擎
-- **Anthropic SDK** - 本地开发用
-
-### 部署
-- **Vercel** - 全球CDN，自动部署
-- **pnpm** - 高效包管理器
+- 像素艺术头像，三种表情状态切换
+- 所有数据存储在 `localStorage`，无账户系统，完全本地
+- 移动端和桌面浏览器均可使用
 
 ---
 
-## 🚀 快速开始
+## 技术栈
 
-### 本地开发
+| 层 | 技术 |
+|----|------|
+| 前端框架 | React 19 + TypeScript |
+| 构建工具 | Vite 8 |
+| 样式 | Tailwind CSS v4 |
+| 状态管理 | Zustand 5 |
+| 路由 | React Router 7 |
+| AI 模型 | DeepSeek v4-flash |
+| 后端 | Vercel Functions |
+| 部署 | Vercel |
+
+---
+
+## 本地开发
 
 ```bash
-# 1. Clone项目
+# 1. Clone
 git clone https://github.com/wuzihanzz/socail-skill-app.git
 cd socail-skill-app
 
 # 2. 安装依赖
-pnpm install
+npm install
 
-# 3. 创建 .env.local 文件（可选，用于本地直接调用Claude）
-echo "VITE_ANTHROPIC_API_KEY=sk-ant-YOUR_KEY_HERE" > .env.local
+# 3. 配置 DeepSeek API Key（本地直连，不走 Vercel Function）
+echo "VITE_DEEPSEEK_API_KEY=sk-your-key-here" > .env.local
 
-# 4. 启动开发服务器
-pnpm dev
-
-# 5. 打开浏览器
-# http://localhost:5173
+# 4. 启动
+npm run dev
+# → http://localhost:5173
 ```
 
-### 生产部署 (Vercel)
+`.env.local` 中的 `VITE_DEEPSEEK_API_KEY` 只用于本地开发模式（`MODE === 'development'`），会直接调用 DeepSeek API。生产环境通过 Vercel Function 中的 `DEEPSEEK_API_KEY` 服务端变量调用，API Key 不会暴露在前端。
 
-1. **关联GitHub**：在Vercel Dashboard中连接你的GitHub仓库
-2. **配置环境变量**：
-   - `DEEPSEEK_API_KEY` - DeepSeek API密钥
-3. **自动部署**：每次push到main分支自动部署
+### 生产部署（Vercel）
+
+1. 在 Vercel Dashboard 连接 GitHub 仓库
+2. 添加环境变量 `DEEPSEEK_API_KEY`
+3. 每次 push 到 `main` 分支自动部署
 
 ---
 
-## 📋 项目结构
+## 项目结构
 
 ```
-social-skill-app/
-├── src/
-│   ├── pages/
-│   │   ├── Home.tsx          # 🏠 社交技巧中心
-│   │   ├── Characters.tsx    # 🎭 角色选择页面
-│   │   ├── Chat.tsx          # 💬 聊天界面
-│   │   └── Profile.tsx       # 👤 角色档案卡（抽屉）
-│   ├── components/
-│   │   ├── PixelAvatar.tsx   # 🎨 像素艺术头像
-│   │   ├── TrustBar.tsx      # 📊 信任度/满意度条形图
-│   │   ├── ChatBubble.tsx    # 💭 聊天气泡
-│   │   └── CharacterCard.tsx # 📇 角色卡片
-│   ├── engine/
-│   │   ├── trustEngine.ts    # 💯 信任度计算
-│   │   ├── skillEngine.ts    # 🔓 技能解锁逻辑
-│   │   ├── promptBuilder.ts  # 🤖 AI系统提示词构建
-│   │   ├── eventGenerator.ts # 📅 日常事件生成
-│   │   ├── conversationHelper.ts # 💡 对话建议生成
-│   │   └── claudeClient.ts   # 🌐 API调用（支持本地代理）
-│   ├── store/
-│   │   └── gameStore.ts      # 🎮 Zustand全局状态
-│   ├── data/
-│   │   ├── characters.ts     # 👥 角色配置与技能定义
-│   │   └── tips.ts           # 📚 社交技巧内容
-│   └── types/index.ts        # 📝 TypeScript类型定义
-├── api/
-│   └── chat.ts               # ⚙️ Vercel API路由
-└── package.json
+src/
+├── pages/
+│   ├── Home.tsx           # 社交技巧中心
+│   ├── Characters.tsx     # 角色选择
+│   ├── Chat.tsx           # 聊天界面
+│   └── Profile.tsx        # 角色档案
+├── components/
+│   ├── PixelAvatar.tsx    # 像素头像（含情绪切换）
+│   ├── ChatBubble.tsx     # 聊天气泡
+│   └── TrustBar.tsx       # 信任度进度条
+├── engine/
+│   ├── promptBuilder.ts   # 系统提示词构建（含角色背景注入）
+│   ├── trustEngine.ts     # 信任度计算
+│   ├── skillEngine.ts     # 技能解锁逻辑
+│   ├── claudeClient.ts    # API 调用（本地 DeepSeek / 生产 Vercel）
+│   ├── eventGenerator.ts  # 每日事件生成
+│   └── conversationHelper.ts  # 对话建议
+├── store/
+│   └── gameStore.ts       # Zustand 全局状态 + localStorage 持久化
+├── data/
+│   ├── characters.ts      # 角色配置（含背景、技能、场所偏好）
+│   └── tips.ts            # 社交技巧内容
+└── types/index.ts         # 类型定义（含 FamilyBackground、VenuePreferences、SocialTendency）
+api/
+└── chat.ts                # Vercel Function（服务端 API 代理）
 ```
 
 ---
 
-## 💡 核心机制
+## 角色数据模型
 
-### 信任度系统工作流程
+角色除了基础信息（名字、职业、MBTI 等），还包含三个扩展字段，为未来的场景系统奠基：
 
+```typescript
+// 成长背景 → 塑造性格根源
+interface FamilyBackground {
+  wealth: 'poor' | 'working-class' | 'middle-class' | 'wealthy' | 'rich';
+  parentalAttitude: 'warm' | 'strict' | 'absent' | 'controlling' | 'supportive';
+  growthEnvironment: 'rural' | 'small-town' | 'suburban' | 'urban';
+  siblingCount: number;
+  keyFormativeEvent?: string;
+}
+
+// 场所偏好 → 决定角色会出现在哪里
+interface VenuePreferences {
+  frequents: VenueType[];  // 常去场所
+  avoids: VenueType[];     // 回避场所
+}
+
+// 社交特质 → 影响对话方式
+interface SocialTendency {
+  extroversion: 1 | 2 | 3 | 4 | 5;
+  trustsEasily: boolean;
+  conflictStyle: 'avoids' | 'confronts' | 'deflects';
+  attachmentStyle: 'secure' | 'anxious' | 'avoidant';
+  drinkingHabit: 'never' | 'rarely' | 'socially' | 'regularly';
+}
 ```
-用户输入 → 前端分析（keywords）→ LLM判断（satisfactionDelta）
-   ↓
-加权计算（40% + 60%）→ 信任度变化
-   ↓
-更新表情、解锁技能、触发事件
-```
-
-### 技能解锁规则
-
-- **Always Visible（总是可见）**：角色的基本特征（如"工作狂"、"创意天才"）
-- **信任度阈值**：达到一定信任度后解锁更深层秘密
-- **自动检测**：当AI响应中出现人物信息（名字、星座、MBTI等），自动标记为已提及
-
-### 短消息策略
-
-角色回复严格遵循"1-2句短消息"规则，用 `\n\n` 分隔多条，模拟真实对话节奏：
-
-```
-你说得有点模糊啊
-
-我没太听明白
-```
 
 ---
 
-## 🎯 学习成效
+## 下一步计划
 
-通过与虚拟角色的对话，用户学习到：
+- **场景系统**：酒吧、咖啡馆、书店等场景，角色根据 `VenuePreferences` 决定是否出现
+- **更多角色**：目标 5–10 个，覆盖不同社交挑战类型（高冷型、话痨型、被动攻击型等）
+- **信任度反馈 Toast**：让用户清楚看到每句话对信任度的影响
+- **角色形象升级**：从 CSS 像素画迁移到 SVG 插画
 
-✅ **同理心表达** - 识别他人情绪，给予共鸣  
-✅ **主动倾听** - 提出开放性问题，深入了解  
-✅ **情绪管理** - 理解不同性格对压力的反应  
-✅ **冲突化解** - 用温和的语气处理分歧  
-✅ **表达感谢** - 真诚认可他人的努力  
-
----
-
-## 🔧 配置
-
-### 环境变量
-
-| 变量 | 说明 | 示例 |
-|------|------|------|
-| `DEEPSEEK_API_KEY` | DeepSeek API密钥（生产） | `sk-...` |
-| `VITE_ANTHROPIC_API_KEY` | Claude API密钥（本地开发） | `sk-ant-...` |
-| `VITE_ANTHROPIC_BASE_URL` | Claude代理地址（可选） | `http://localhost:8000` |
-
-### 支持的模型
-
-- **生产**：DeepSeek v4-flash（高效、低成本）
-- **本地**：Claude Haiku 4.5（高质量、适合测试）
+详见 [ROADMAP.md](ROADMAP.md)
 
 ---
 
-## 📊 性能指标
+## 许可
 
-| 指标 | 数值 |
-|------|------|
-| 首屏加载 | < 1s |
-| 构建体积 | 275 kB (JS) + 16 kB (CSS) |
-| API响应 | ~1-2s |
-| 本地保存 | localStorage + Zustand |
-
----
-
-## 🎓 使用场景
-
-👥 **社交焦虑患者** - 在安全环境中练习对话  
-📚 **学生** - 学习人际关系管理  
-💼 **职场人士** - 改进沟通技巧  
-🌍 **语言学习者** - 通过自然对话学习表达  
-
----
-
-## 🤝 贡献
-
-欢迎贡献！请遵循以下步骤：
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
-### 贡献想法
-- 🎭 新增角色或故事线
-- 🎨 改进像素艺术风格
-- 📚 扩展社交技巧库
-- 🐛 报告问题和建议
-
----
-
-## 📄 许可
-
-MIT License - 详见 [LICENSE](LICENSE)
-
----
-
-## 🙏 致谢
-
-- [Anthropic](https://anthropic.com) - Claude AI
-- [DeepSeek](https://deepseek.com) - 高效LLM
-- [Vercel](https://vercel.com) - 部署平台
-- 所有贡献者和用户的支持
-
----
-
-## 📞 联系方式
-
-- 🐛 [Issue Tracker](https://github.com/wuzihanzz/socail-skill-app/issues)
-- 💬 [讨论区](https://github.com/wuzihanzz/socail-skill-app/discussions)
-- 📧 有问题？提交Issue告诉我们
+MIT License
 
 ---
 
 <div align="center">
-
-**如果这个项目对你有帮助，请给我一个 ⭐ Star！**
 
 Made with ❤️ by [Zihan Wu](https://github.com/wuzihanzz)
 
