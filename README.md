@@ -6,7 +6,10 @@
 
 ![Status](https://img.shields.io/badge/Status-Active-green) ![React](https://img.shields.io/badge/React-19-blue) ![Vite](https://img.shields.io/badge/Vite-8-purple) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 
-**线上地址**：[socail-skill-app.vercel.app](https://socail-skill-app-nlaw.vercel.app)
+**线上体验**：
+
+- 🇨🇳 国内访问（推荐）：[social.preview.aliyun-zeabur.cn](https://social.preview.aliyun-zeabur.cn)
+- 🌍 海外访问：[socail-skill-app-nlaw.vercel.app](https://socail-skill-app-nlaw.vercel.app)
 
 ---
 
@@ -59,8 +62,8 @@
 | 状态管理 | Zustand 5 |
 | 路由 | React Router 7 |
 | AI 模型 | DeepSeek v4-flash |
-| 后端 | Vercel Functions |
-| 部署 | Vercel |
+| 后端 | Express(Zeabur)/ Vercel Functions |
+| 部署 | Zeabur(国内)/ Vercel(海外) |
 
 ---
 
@@ -84,11 +87,19 @@ npm run dev
 
 `.env.local` 中的 `VITE_DEEPSEEK_API_KEY` 只用于本地开发模式（`MODE === 'development'`），会直接调用 DeepSeek API。生产环境通过 Vercel Function 中的 `DEEPSEEK_API_KEY` 服务端变量调用，API Key 不会暴露在前端。
 
-### 生产部署（Vercel）
+### 生产部署
+
+**Vercel（海外）**
 
 1. 在 Vercel Dashboard 连接 GitHub 仓库
 2. 添加环境变量 `DEEPSEEK_API_KEY`
-3. 每次 push 到 `main` 分支自动部署
+3. 每次 push 到 `main` 分支自动部署,使用 `api/chat.ts` 作为 Serverless Function
+
+**Zeabur（国内）**
+
+1. 在 Zeabur 控制台导入 GitHub 仓库
+2. 添加环境变量 `DEEPSEEK_API_KEY`
+3. 自动识别 `Dockerfile` / `zeabur.json`,构建后由 `server.ts`(Express)同时托管前端静态资源和 `/api/chat` 接口
 
 ---
 
@@ -119,7 +130,10 @@ src/
 │   └── tips.ts            # 社交技巧内容
 └── types/index.ts         # 类型定义（含 FamilyBackground、VenuePreferences、SocialTendency）
 api/
-└── chat.ts                # Vercel Function（服务端 API 代理）
+└── chat.ts                # Vercel Function(服务端 API 代理)
+server.ts                  # Express 服务器(Zeabur 部署用,同时托管 dist/ 与 /api/chat)
+Dockerfile                 # Zeabur 容器构建
+zeabur.json                # Zeabur 构建/启动配置
 ```
 
 ---
