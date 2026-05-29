@@ -11,6 +11,15 @@ import { calculateTrustDelta, isHarmfulMessage } from '../engine/trustEngine';
 import { sendMessage } from '../engine/claudeClient';
 import { generateConversationTips } from '../engine/conversationHelper';
 
+const splitAssistantMessages = (value: unknown): string[] => {
+  if (typeof value !== 'string') return [];
+  return value
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map((part) => part.replace(/\n+/g, '\n').trim())
+    .filter(Boolean);
+};
+
 const Chat: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -88,12 +97,12 @@ const Chat: React.FC = () => {
         const parsed = JSON.parse(jsonStr);
         satisfactionDelta = parsed.satisfactionDelta ?? 3;
         if (Array.isArray(parsed.messages)) {
-          chunks = parsed.messages.map((s: string) => s.trim()).filter(Boolean);
+          chunks = parsed.messages.flatMap(splitAssistantMessages);
         } else if (parsed.message) {
-          chunks = parsed.message.split('\n\n').map((s: string) => s.trim()).filter(Boolean);
+          chunks = splitAssistantMessages(parsed.message);
         }
       } catch {
-        chunks = [aiResponse];
+        chunks = splitAssistantMessages(aiResponse);
       }
       if (chunks.length === 0) chunks = [aiResponse];
 
