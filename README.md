@@ -8,8 +8,7 @@
 
 **线上体验**：
 
-- 🇨🇳 国内访问（推荐）：[social.preview.aliyun-zeabur.cn](https://social.preview.aliyun-zeabur.cn)
-- 🌍 海外访问：[socail-skill-app-nlaw.vercel.app](https://socail-skill-app-nlaw.vercel.app)
+- 🇨🇳 国内访问：[social.preview.aliyun-zeabur.cn](https://social.preview.aliyun-zeabur.cn)
 
 ---
 
