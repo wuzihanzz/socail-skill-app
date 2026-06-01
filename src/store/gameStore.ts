@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { GameState, RelationshipState, Message } from '../types/index';
 import characters from '../data/characters';
+import { createMemoryWing, normalizeMemoryWing } from '../engine/memoryEngine';
 
 const STORAGE_KEY = 'social-skill-game-state';
 
@@ -18,6 +19,7 @@ const initializeRelationships = (): Record<string, RelationshipState> => {
         .filter((s) => s.alwaysVisible)
         .map((s) => s.id),
       conversationHistory: [],
+      memoryWing: createMemoryWing(char.id, char.nickname),
       lastDailyEvent: new Date().toISOString().split('T')[0],
       todayEventTriggered: false,
       firstMessageSent: false,
@@ -47,6 +49,10 @@ interface Store extends GameState {
   setTodayEventTriggered: (characterId: string, triggered: boolean) => void;
   setFirstMessageSent: (characterId: string, sent: boolean) => void;
   updateUserNotes: (characterId: string, notes: string) => void;
+  updateMemoryWing: (
+    characterId: string,
+    updater: (relationship: RelationshipState) => RelationshipState['memoryWing']
+  ) => void;
   markAskedAbout: (
     characterId: string,
     field: 'name' | 'age' | 'job' | 'mbti' | 'zodiac'
@@ -194,6 +200,28 @@ export const useGameStore = create<Store>((set) => ({
       return newState;
     }),
 
+  updateMemoryWing: (
+    characterId: string,
+    updater: (relationship: RelationshipState) => RelationshipState['memoryWing']
+  ) =>
+    set((state) => {
+      const newRelationships = { ...state.relationships };
+      const relationship = newRelationships[characterId];
+      if (relationship) {
+        newRelationships[characterId] = {
+          ...relationship,
+          memoryWing: updater(relationship),
+        };
+      }
+
+      const newState = {
+        ...state,
+        relationships: newRelationships,
+      };
+      saveToStorage(newState);
+      return newState;
+    }),
+
   markAskedAbout: (
     characterId: string,
     field: 'name' | 'age' | 'job' | 'mbti' | 'zodiac'
@@ -216,7 +244,7 @@ export const useGameStore = create<Store>((set) => ({
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
-        const state = JSON.parse(stored);
+        const state = normalizeStoredState(JSON.parse(stored));
         set(state);
       } catch (e) {
         console.error('Failed to load from storage:', e);
@@ -239,6 +267,7 @@ export const useGameStore = create<Store>((set) => ({
             .filter((s) => s.alwaysVisible)
             .map((s) => s.id),
           conversationHistory: [],
+          memoryWing: createMemoryWing(character.id, character.nickname),
           lastDailyEvent: new Date().toISOString().split('T')[0],
           todayEventTriggered: false,
           firstMessageSent: false,
@@ -269,6 +298,39 @@ const saveToStorage = (state: GameState) => {
   } catch (e) {
     console.error('Failed to save to storage:', e);
   }
+};
+
+const normalizeStoredState = (state: GameState): GameState => {
+  const defaults = initializeRelationships();
+  const relationships = { ...defaults, ...(state.relationships ?? {}) };
+
+  characters.forEach((character) => {
+    const relationship = relationships[character.id] ?? defaults[character.id];
+    relationships[character.id] = {
+      ...defaults[character.id],
+      ...relationship,
+      askedAbout: {
+        ...defaults[character.id].askedAbout,
+        ...relationship.askedAbout,
+      },
+      conversationHistory: relationship.conversationHistory ?? [],
+      unlockedSkills: relationship.unlockedSkills ?? defaults[character.id].unlockedSkills,
+      memoryWing: normalizeMemoryWing(
+        relationship.memoryWing,
+        character.id,
+        character.nickname
+      ),
+    };
+  });
+
+  return {
+    ...state,
+    relationships,
+    conversationHistory:
+      state.currentCharacterId && relationships[state.currentCharacterId]
+        ? relationships[state.currentCharacterId].conversationHistory
+        : state.conversationHistory ?? [],
+  };
 };
 
 // Load from storage on app start

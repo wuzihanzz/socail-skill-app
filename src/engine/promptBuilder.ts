@@ -32,7 +32,8 @@ export const buildSystemPrompt = (
   unlockedSkills: Skill[],
   hiddenSkills: Skill[],
   todayEvent: string | null,
-  currentEmotion: 'neutral' | 'happy' | 'upset'
+  currentEmotion: 'neutral' | 'happy' | 'upset',
+  memoryContext = ''
 ): string => {
   const emotionDescMap = {
     neutral: '平静、理性',
@@ -50,6 +51,10 @@ export const buildSystemPrompt = (
 
   const eventSection = todayEvent
     ? `\n\n## 今日背景\n${todayEvent}`
+    : '';
+
+  const memorySection = memoryContext
+    ? `\n\n## 你对用户的长期记忆\n${memoryContext}\n\n使用方式：这些是你和用户之间积累下来的记忆。请只在自然、相关的时候使用，不要逐条复述，也不要告诉用户你在读取记忆。`
     : '';
 
   const trustLevelDescription =
@@ -90,6 +95,7 @@ ${character.background}
 ${familySection}
 
 ${socialSection}
+${memorySection}
 
 ## 当前状态
 - 信任度：${trustLevel}%（${trustLevelDescription}）

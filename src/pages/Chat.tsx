@@ -10,6 +10,7 @@ import { generateTodayEvent } from '../engine/eventGenerator';
 import { calculateTrustDelta, isHarmfulMessage } from '../engine/trustEngine';
 import { sendMessage } from '../engine/claudeClient';
 import { generateConversationTips } from '../engine/conversationHelper';
+import { buildMemoryContext, updateMemoryFromTurn } from '../engine/memoryEngine';
 
 const splitAssistantMessages = (value: unknown): string[] => {
   if (typeof value !== 'string') return [];
@@ -29,6 +30,7 @@ const Chat: React.FC = () => {
     updateTrustLevel,
     setTodayEventTriggered,
     markAskedAbout,
+    updateMemoryWing,
   } = useGameStore();
 
   const [input, setInput] = useState('');
@@ -76,7 +78,8 @@ const Chat: React.FC = () => {
     const { trustDelta, emotionChange } = calculateTrustDelta(userMessage, '', !relationship.firstMessageSent);
     const unlockedSkills = getUnlockedSkills(character, relationship.trustLevel, relationship.unlockedSkills);
     const hiddenSkills = getHiddenSkills(character, relationship.trustLevel, relationship.unlockedSkills);
-    const systemPrompt = buildSystemPrompt(character, relationship.trustLevel + trustDelta, unlockedSkills, hiddenSkills, todayEvent, emotionChange);
+    const memoryContext = buildMemoryContext(relationship.memoryWing, userMessage, relationship.currentEmotion);
+    const systemPrompt = buildSystemPrompt(character, relationship.trustLevel + trustDelta, unlockedSkills, hiddenSkills, todayEvent, emotionChange, memoryContext);
 
     setLoading(true);
 
@@ -112,6 +115,19 @@ const Chat: React.FC = () => {
       let finalEmotion: 'neutral' | 'happy' | 'upset' = emotionChange;
       if (satisfactionDelta >= 4) finalEmotion = 'happy';
       else if (satisfactionDelta <= 2) finalEmotion = 'upset';
+
+      updateMemoryWing(currentCharacterId, (latestRelationship) =>
+        updateMemoryFromTurn(latestRelationship.memoryWing, {
+          characterId: currentCharacterId,
+          characterName: character.nickname,
+          userMessage,
+          assistantMessages: chunks,
+          trustDelta: finalTrustDelta,
+          trustLevel: latestRelationship.trustLevel + finalTrustDelta,
+          emotion: finalEmotion,
+          todayEvent,
+        })
+      );
 
       const fullText = chunks.join(' ').toLowerCase();
       if (fullText.includes(character.name)) markAskedAbout(currentCharacterId, 'name');

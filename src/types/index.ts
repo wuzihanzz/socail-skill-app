@@ -86,6 +86,7 @@ export interface RelationshipState {
   currentEmotion: 'neutral' | 'happy' | 'upset';
   unlockedSkills: string[]; // skill IDs
   conversationHistory: Message[];
+  memoryWing: MemoryWing;
   lastDailyEvent: string;
   todayEventTriggered: boolean;
   firstMessageSent: boolean;
@@ -97,6 +98,55 @@ export interface RelationshipState {
     mbti: boolean;
     zodiac: boolean;
   };
+}
+
+// Memory palace: one wing per character/bot, rooms by relationship topic.
+export interface MemoryWing {
+  id: string;
+  ownerType: 'character' | 'system' | 'future-bot';
+  ownerId: string;
+  name: string;
+  rooms: Record<MemoryRoomType, MemoryRoom>;
+  diary: MemoryDiaryEntry[];
+  lastVisitedAt: number;
+}
+
+export type MemoryRoomType =
+  | 'user-profile'
+  | 'relationship'
+  | 'shared-events'
+  | 'conflict'
+  | 'preferences'
+  | 'unresolved'
+  | 'milestones';
+
+export interface MemoryRoom {
+  id: MemoryRoomType;
+  name: string;
+  type: MemoryRoomType;
+  drawers: MemoryDrawer[];
+}
+
+export interface MemoryDrawer {
+  id: string;
+  content: string;
+  speaker?: 'user' | 'assistant';
+  source: 'conversation' | 'system' | 'manual';
+  importance: 1 | 2 | 3 | 4 | 5;
+  emotionalTone?: 'positive' | 'neutral' | 'negative' | 'tense' | 'repaired';
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  lastAccessedAt?: number;
+  lastMentionedAt?: number;
+}
+
+export interface MemoryDiaryEntry {
+  id: string;
+  content: string;
+  createdAt: number;
+  trustLevel: number;
+  emotion: 'neutral' | 'happy' | 'upset';
 }
 
 // Message
