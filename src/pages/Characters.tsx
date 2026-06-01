@@ -18,39 +18,50 @@ const Characters: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
+    <div className="min-h-screen bg-[#f6f5f2] text-gray-950">
+      <header className="border-b border-gray-200 bg-white/80 backdrop-blur">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4 sm:px-6">
           <button
             onClick={() => navigate('/')}
-            className="text-purple-600 text-sm font-medium px-2 py-1 rounded-lg hover:bg-purple-50 active:scale-95 transition-all flex-shrink-0"
+            className="flex-shrink-0 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-gray-300 active:scale-95"
           >
-            ← 返回
+            返回
           </button>
           <div className="min-w-0">
-            <h1 className="text-lg font-bold text-gray-900 leading-tight">选择对话伙伴</h1>
-            <p className="text-xs text-gray-400 truncate">每个人都有独特的故事</p>
+            <h1 className="text-lg font-bold leading-tight text-gray-950">选择对话对象</h1>
+            <p className="truncate text-xs text-gray-500">每个人都有自己的节奏和边界</p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-5 space-y-5">
-        {/* Character Cards */}
-        <div className="space-y-3">
+      <main className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+        <div className="mb-4 grid grid-cols-3 gap-2">
+          {[
+            ['对象', characters.length.toString()],
+            ['状态', '练习'],
+            ['目标', '信任'],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-[8px] border border-gray-200 bg-white px-3 py-3 shadow-sm">
+              <p className="text-xs text-gray-500">{label}</p>
+              <p className="mt-1 text-base font-bold text-gray-950">{value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
           {characters.map((character) => {
             const rel = relationships[character.id];
             const unlockedCount = rel?.unlockedSkills.length ?? 0;
-            const trustLevel = rel?.trustLevel ?? 0;
+            const trustLevel = rel?.trustLevel ?? 25;
+            const messageCount = rel?.conversationHistory.length ?? 0;
 
             return (
               <button
                 key={character.id}
                 onClick={() => handleSelect(character.id)}
-                className="w-full bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-4 text-left hover:border-purple-300 hover:shadow-sm active:scale-[0.99] transition-all"
+                className="flex w-full items-center gap-4 rounded-[8px] border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-gray-300 hover:bg-gray-50 active:scale-[0.99]"
               >
-                {/* Avatar */}
-                <div className="flex-shrink-0 w-16 h-20 bg-gradient-to-b from-gray-100 to-gray-200 rounded-xl border border-gray-200 overflow-hidden flex items-center justify-center">
+                <div className="flex h-20 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-gray-200 bg-gray-100">
                   <PixelAvatar
                     characterId={character.id}
                     emotion={rel?.currentEmotion ?? 'neutral'}
@@ -58,58 +69,53 @@ const Characters: React.FC = () => {
                   />
                 </div>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="font-bold text-gray-900 text-base">{character.nickname}</span>
-                    <span className="text-xs text-gray-400">{character.age}岁</span>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-0.5 flex items-center justify-between gap-3">
+                    <span className="truncate text-base font-bold text-gray-950">{character.nickname}</span>
+                    <span className="text-xs text-gray-400">{trustLevel.toFixed(0)}%</span>
                   </div>
-                  <p className="text-xs text-gray-400 italic truncate mb-2">{character.signature}</p>
+                  <p className="mb-2 truncate text-xs text-gray-500">
+                    {messageCount > 0 ? '继续这段对话' : '等待你开启关系'}
+                  </p>
+                  <p className="mb-3 line-clamp-2 text-xs leading-5 text-gray-500">
+                    {character.signature || character.background}
+                  </p>
 
-                  {/* Tags */}
-                  <div className="flex flex-wrap gap-1">
-                    {unlockedCount > 0 && (rel?.conversationHistory.length ?? 0) > 0 && (
-                      <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full">
-                        已了解 {unlockedCount}/{character.skills.length}
-                      </span>
-                    )}
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                      已了解 {unlockedCount}/{character.skills.length}
+                    </span>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                      {messageCount > 0 ? `${messageCount} 条记录` : '未开始'}
+                    </span>
                   </div>
 
-                  {/* Trust bar */}
-                  {trustLevel > 0 && (rel?.conversationHistory.length ?? 0) > 0 && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-purple-400 to-indigo-500 rounded-full transition-all"
-                          style={{ width: `${trustLevel}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{trustLevel.toFixed(2)}%</span>
-                    </div>
-                  )}
+                  <div className="h-1 overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all"
+                      style={{ width: `${trustLevel}%` }}
+                    />
+                  </div>
                 </div>
-
-                <span className="text-gray-300 flex-shrink-0 text-lg">›</span>
               </button>
             );
           })}
         </div>
 
-        {/* Tips panel */}
-        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-          <h3 className="text-sm font-semibold text-blue-700 mb-2">📌 记住</h3>
-          <ul className="space-y-1">
-            {['认真倾听他们说什么', '表达你的理解和同情', '在冲突中主动修复关系'].map((t) => (
-              <li key={t} className="text-xs text-blue-600 flex items-start gap-1.5">
-                <span className="mt-0.5 flex-shrink-0">✓</span>{t}
-              </li>
+        <div className="mt-4 rounded-[8px] border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-bold text-gray-900">练习提醒</h3>
+          <div className="mt-3 space-y-2">
+            {[
+              '认真回应对方真正表达的感受',
+              '关系紧张时先修复，再追问',
+              '不要把建议说得像评判',
+            ].map((text) => (
+              <div key={text} className="flex items-start gap-2 text-xs leading-5 text-gray-600">
+                <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-500" />
+                <span>{text}</span>
+              </div>
             ))}
-            {['说冷漠或伤人的话', '无视他们的感受'].map((t) => (
-              <li key={t} className="text-xs text-red-400 flex items-start gap-1.5">
-                <span className="mt-0.5 flex-shrink-0">✗</span>{t}
-              </li>
-            ))}
-          </ul>
+          </div>
         </div>
       </main>
     </div>

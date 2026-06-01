@@ -14,6 +14,15 @@ const windowMs = Number(process.env.CHAT_RATE_LIMIT_WINDOW_MS) || 60_000;
 const maxRequests = Number(process.env.CHAT_RATE_LIMIT_MAX) || 12;
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 
+type DeepSeekResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
+  usage?: unknown;
+};
+
 const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (!origin) return process.env.ALLOW_MISSING_ORIGIN === 'true';
   return allowedOrigins.has(origin);
@@ -101,7 +110,7 @@ export default async function handler(
       });
     }
 
-    const data = await response.json() as any;
+    const data = await response.json() as DeepSeekResponse;
     const content = data.choices?.[0]?.message?.content;
 
     if (content) {

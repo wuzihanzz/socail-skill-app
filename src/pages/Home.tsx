@@ -111,7 +111,7 @@ const Home: React.FC = () => {
         <section className="mb-4 grid grid-cols-3 gap-2">
           {[
             ['角色', characters.length.toString(), '可探索'],
-            ['记忆', '已启用', '长期上下文'],
+            ['进度', hasStarted ? '继续' : '未开始', hasStarted ? '回到对话' : '选择对象'],
             ['模式', '练习', '自然对话'],
           ].map(([label, value, hint]) => (
             <div key={label} className="rounded-[8px] border border-gray-200 bg-white px-3 py-3 shadow-sm">
@@ -156,7 +156,7 @@ const Home: React.FC = () => {
                       <span className="text-xs text-gray-400">{trustLevel.toFixed(0)}%</span>
                     </div>
                     <p className="mt-0.5 truncate text-xs text-gray-500">
-                      {messageCount > 0 ? `${messageCount} 条对话记录` : character.job}
+                      {messageCount > 0 ? `${messageCount} 条对话记录` : '等待你开启关系'}
                     </p>
                     <div className="mt-2 h-1 overflow-hidden rounded-full bg-gray-100">
                       <div

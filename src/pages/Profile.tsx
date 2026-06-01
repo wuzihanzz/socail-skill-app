@@ -13,10 +13,10 @@ const Profile: React.FC = () => {
 
   if (!currentCharacterId) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-4">
-        <p className="text-gray-500 text-sm">请先选择一个人物</p>
-        <button onClick={() => navigate('/characters')} className="text-purple-600 text-sm font-medium">
-          返回选择人物
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#f6f5f2] p-4">
+        <p className="text-sm text-gray-500">请先选择一个角色</p>
+        <button onClick={() => navigate('/characters')} className="text-sm font-semibold text-gray-900">
+          返回选择
         </button>
       </div>
     );
@@ -27,9 +27,11 @@ const Profile: React.FC = () => {
 
   if (!character || !relationship) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-4">
-        <p className="text-gray-500 text-sm">人物信息不存在</p>
-        <button onClick={() => navigate('/chat')} className="text-purple-600 text-sm font-medium">返回聊天</button>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#f6f5f2] p-4">
+        <p className="text-sm text-gray-500">角色信息不存在</p>
+        <button onClick={() => navigate('/chat')} className="text-sm font-semibold text-gray-900">
+          返回聊天
+        </button>
       </div>
     );
   }
@@ -37,7 +39,11 @@ const Profile: React.FC = () => {
   const askedAbout = relationship.askedAbout ?? { name: false, age: false, job: false, mbti: false, zodiac: false };
   const unlockedSkills = getUnlockedSkills(character, relationship.trustLevel, relationship.unlockedSkills);
   const trustLevel = relationship.trustLevel;
-  const trustLabel = trustLevel < 30 ? '陌生人' : trustLevel < 50 ? '认识' : trustLevel < 70 ? '信任' : '非常信任';
+  const trustLabel = trustLevel < 30 ? '陌生' : trustLevel < 50 ? '认识' : trustLevel < 70 ? '信任' : '深度信任';
+  const memoryCount = Object.values(relationship.memoryWing?.rooms ?? {}).reduce(
+    (sum, room) => sum + room.drawers.length,
+    0
+  );
 
   const infoRows = [
     { label: '年龄', unlocked: askedAbout.age, value: String(character.age) },
@@ -47,89 +53,102 @@ const Profile: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-2xl mx-auto w-full">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-4 py-4 flex items-center gap-3">
-        <button onClick={() => navigate('/chat')} className="text-purple-600 text-sm font-medium px-2 py-1 rounded-lg hover:bg-purple-50 active:scale-95 transition-all">
-          ← 返回
-        </button>
-        <h1 className="font-bold text-gray-900">个人档案</h1>
+    <div className="min-h-screen bg-[#f6f5f2] text-gray-950">
+      <header className="border-b border-gray-200 bg-white/80 backdrop-blur">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4 sm:px-6">
+          <button
+            onClick={() => navigate('/chat')}
+            className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-gray-300 active:scale-95"
+          >
+            返回
+          </button>
+          <div>
+            <h1 className="font-bold text-gray-950">关系档案</h1>
+            <p className="text-xs text-gray-500">随着对话逐步打开</p>
+          </div>
+        </div>
       </header>
 
-      <main className="px-4 py-5 space-y-4">
-        {/* Identity card */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-4">
-          <div className="flex-shrink-0 w-16 h-20 bg-gradient-to-b from-gray-100 to-gray-200 rounded-xl border border-gray-200 overflow-hidden flex items-center justify-center">
+      <main className="mx-auto max-w-3xl space-y-4 px-4 py-5 sm:px-6">
+        <div className="flex items-center gap-4 rounded-[8px] border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex h-20 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-gray-200 bg-gray-100">
             <PixelAvatar characterId={character.id} emotion={relationship.currentEmotion} name={character.name} />
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-bold text-gray-900 text-base">{character.nickname}</div>
-            <div className="text-xs text-gray-400 italic truncate mb-2">{character.signature}</div>
+          <div className="min-w-0 flex-1">
+            <div className="text-base font-bold text-gray-950">{character.nickname}</div>
+            <div className="mb-2 truncate text-xs text-gray-500">{character.signature}</div>
             <p className="text-xs text-gray-500">
               真名：{askedAbout.name
-                ? <span className="text-gray-900 font-medium">{character.name}</span>
-                : <span className="tracking-widest text-gray-300">●●●●</span>}
+                ? <span className="font-medium text-gray-900">{character.name}</span>
+                : <span className="tracking-widest text-gray-300">••••</span>}
             </p>
           </div>
         </div>
 
-        {/* Trust */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">关系状态</h3>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-purple-400 to-indigo-500 rounded-full transition-all duration-500"
-                style={{ width: `${trustLevel}%` }}
-              />
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            ['信任', `${trustLevel.toFixed(0)}%`, trustLabel],
+            ['记忆', `${memoryCount}`, '片段'],
+            ['了解', `${unlockedSkills.length}/${character.skills.length}`, '特质'],
+          ].map(([label, value, hint]) => (
+            <div key={label} className="rounded-[8px] border border-gray-200 bg-white px-3 py-3 shadow-sm">
+              <p className="text-xs text-gray-500">{label}</p>
+              <p className="mt-1 text-base font-bold text-gray-950">{value}</p>
+              <p className="mt-0.5 text-xs text-gray-400">{hint}</p>
             </div>
-            <span className="text-sm font-semibold text-purple-600 flex-shrink-0">{trustLevel.toFixed(2)}%</span>
-          </div>
-          <p className="text-xs text-gray-400 text-right">{trustLabel}</p>
+          ))}
         </div>
 
-        {/* Basic info */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">基本信息</h3>
+        <div className="rounded-[8px] border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-900">关系状态</h3>
+            <span className="text-xs font-semibold text-emerald-700">{trustLabel}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+              style={{ width: `${trustLevel}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-[8px] border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-sm font-bold text-gray-900">基本信息</h3>
           <div className="grid grid-cols-2 gap-3">
             {infoRows.map(({ label, unlocked, value }) => (
-              <div key={label} className="flex flex-col gap-0.5">
-                <span className="text-xs text-gray-400">{label}</span>
+              <div key={label} className="rounded-[8px] bg-gray-50 p-3">
+                <span className="text-xs text-gray-500">{label}</span>
                 {unlocked
-                  ? <span className="text-sm font-medium text-gray-900">{value}</span>
-                  : <span className="text-sm tracking-widest text-gray-200 font-bold">●●●</span>}
+                  ? <span className="mt-1 block text-sm font-semibold text-gray-900">{value}</span>
+                  : <span className="mt-1 block text-sm font-bold tracking-widest text-gray-300">•••</span>}
               </div>
             ))}
           </div>
         </div>
 
-        {/* Unlocked traits */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-            已了解的特质 ({unlockedSkills.length}/{character.skills.length})
-          </h3>
+        <div className="rounded-[8px] border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-sm font-bold text-gray-900">已了解的特质</h3>
           {unlockedSkills.length > 0 ? (
             <div className="space-y-2">
               {unlockedSkills.map((skill) => (
-                <div key={skill.id} className="bg-gray-50 rounded-xl p-3 border-l-2 border-purple-400">
-                  <div className="text-sm font-semibold text-gray-800 mb-0.5">{skill.name}</div>
-                  <div className="text-xs text-gray-500 leading-relaxed">{skill.description}</div>
+                <div key={skill.id} className="rounded-[8px] border border-gray-100 bg-gray-50 p-3">
+                  <div className="mb-0.5 text-sm font-semibold text-gray-900">{skill.name}</div>
+                  <div className="text-xs leading-5 text-gray-500">{skill.description}</div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-300 italic">还没有了解这个人的特点呢</p>
+            <p className="text-sm italic text-gray-400">还没有了解这个人的特点</p>
           )}
         </div>
 
-        {/* Notes */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">我的笔记</h3>
+        <div className="rounded-[8px] border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-900">我的笔记</h3>
             {!editingNotes && (
               <button
                 onClick={() => { setNotes(relationship.userNotes ?? ''); setEditingNotes(true); }}
-                className="text-xs text-purple-600 font-medium px-2 py-1 rounded-lg hover:bg-purple-50 active:scale-95 transition-all"
+                className="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 transition hover:border-gray-300 active:scale-95"
               >
                 编辑
               </button>
@@ -141,27 +160,27 @@ const Profile: React.FC = () => {
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="记录你对这个人的了解…"
+                placeholder="记录你对这个人的观察"
                 rows={5}
-                className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
+                className="w-full resize-none rounded-[8px] border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
-              <div className="flex gap-2 justify-end">
+              <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setEditingNotes(false)}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 active:scale-95 transition-all"
+                  className="rounded-[8px] bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-200 active:scale-95"
                 >
                   取消
                 </button>
                 <button
                   onClick={() => { updateUserNotes(currentCharacterId, notes); setEditingNotes(false); }}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700 active:scale-95 transition-all"
+                  className="rounded-[8px] bg-gray-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-gray-800 active:scale-95"
                 >
                   保存
                 </button>
               </div>
             </div>
           ) : (
-            <p className={`text-sm leading-relaxed ${relationship.userNotes ? 'text-gray-700' : 'text-gray-300 italic'}`}>
+            <p className={`text-sm leading-6 ${relationship.userNotes ? 'text-gray-700' : 'italic text-gray-400'}`}>
               {relationship.userNotes || '还没有笔记'}
             </p>
           )}
