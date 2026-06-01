@@ -152,7 +152,7 @@ export const buildMemoryContext = (
   const grouped = groupByRoom(scored);
   return Object.entries(grouped)
     .map(([roomType, items]) => {
-      const lines = items.map(({ drawer }) => `- ${drawer.content}`).join('\n');
+      const lines = items.slice(0, 2).map(({ drawer }) => `- ${drawer.content}`).join('\n');
       return `### ${ROOM_LABELS[roomType as MemoryRoomType]}\n${lines}`;
     })
     .join('\n');
@@ -237,7 +237,10 @@ const extractDrawers = (
     });
   }
 
-  if (assistantText.length > 0 && (input.todayEvent || input.trustDelta !== 0)) {
+  if (
+    assistantText.length > 0 &&
+    (input.todayEvent || input.trustDelta !== 0 || tags.length > 0 || looksLikeUserFact(userText))
+  ) {
     results.push({
       roomType: 'shared-events',
       drawer: createDrawer({
@@ -367,7 +370,7 @@ const inferTags = (text: string): string[] => {
     ['stress', ['压力', '累', '焦虑', '崩溃', '烦']],
     ['relationship', ['朋友', '关系', '喜欢', '讨厌', '分手', '恋爱']],
     ['apology', ['对不起', '抱歉', '不是故意', '误会']],
-    ['preference', ['喜欢', '不喜欢', '希望', '别', '不要']],
+    ['preference', ['喜欢', '不喜欢', '希望', '不要', '建议', '大道理', '讲道理', '说教']],
   ];
 
   return pairs
@@ -379,13 +382,13 @@ const looksLikeUserFact = (text: string) =>
   /(我是|我在|我最近|我之前|我以前|我的|我家|我工作|我喜欢|我讨厌|我不喜欢|我希望)/.test(text);
 
 const looksLikePreference = (text: string) =>
-  /(我喜欢|我不喜欢|我讨厌|我希望|别|不要|可以直接|慢一点|温柔一点)/.test(text);
+  /(我喜欢|我不喜欢|我讨厌|我希望|别|不要|不用给建议|不想听建议|大道理|说教|可以直接|慢一点|温柔一点)/.test(text);
 
 const looksLikeRepair = (text: string) =>
   /(对不起|抱歉|不好意思|不是故意|我不是那个意思|我刚才说重了|我道歉)/.test(text);
 
 const looksUnresolved = (userText: string, assistantText: string) =>
-  /(\?|？|以后再说|下次|有机会|不想说|算了|没事)/.test(`${userText} ${assistantText}`);
+  /(以后再说|下次再说|有机会再聊|不想说|算了|先这样|改天)/.test(`${userText} ${assistantText}`);
 
 const quote = (text: string) => {
   const normalized = text.replace(/\s+/g, ' ').trim();
