@@ -94,7 +94,7 @@ const Home: React.FC = () => {
                   <div className="mt-4 flex items-center gap-3">
                     <button
                       onClick={handleContinue}
-                      className="rounded-[8px] bg-gray-950 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800 active:scale-95"
+                      className="min-w-[104px] whitespace-nowrap rounded-[8px] bg-gray-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800 active:scale-95"
                     >
                       开始对话
                     </button>
