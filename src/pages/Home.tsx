@@ -1,192 +1,187 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import characters from '../data/characters';
-import tips from '../data/tips';
 import { useGameStore } from '../store/gameStore';
 import PixelAvatar from '../components/PixelAvatar';
+
+const theme = {
+  bg: '#eef3ed',
+  shell: '#fbfdf8',
+  accent: '#4f735f',
+  accentSoft: '#dce9df',
+  ink: '#1f3128',
+  muted: '#66756b',
+  title: '今天练习一次连接',
+  subtitle: '从倾听、追问、道歉或表达边界开始，让对话有一个温柔的下一步。',
+};
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { relationships, currentCharacterId, setCurrentCharacter } = useGameStore();
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(() => currentCharacterId);
 
   useEffect(() => {
     useGameStore.getState().loadFromStorage();
   }, []);
 
-  const activeRelationships = characters
-    .map((character) => ({
-      character,
-      relationship: relationships[character.id],
-    }))
-    .sort((a, b) => {
-      const aLast = a.relationship?.conversationHistory.at(-1)?.timestamp ?? 0;
-      const bLast = b.relationship?.conversationHistory.at(-1)?.timestamp ?? 0;
-      return bLast - aLast;
-    });
-
-  const hasStarted = activeRelationships.some(
-    ({ relationship }) => (relationship?.conversationHistory.length ?? 0) > 0
-  );
+  const relationshipEntries = characters.map((character) => ({
+    character,
+    relationship: relationships[character.id],
+  }));
 
   const featured =
-    activeRelationships.find(({ character }) => character.id === currentCharacterId) ??
-    activeRelationships.find(({ relationship }) => (relationship?.conversationHistory.length ?? 0) > 0) ??
-    activeRelationships[0];
+    relationshipEntries.find(({ character }) => character.id === selectedCharacterId) ??
+    relationshipEntries.find(({ character }) => character.id === currentCharacterId) ??
+    relationshipEntries.find(({ relationship }) => (relationship?.conversationHistory.length ?? 0) > 0) ??
+    relationshipEntries[0];
 
-  const handleContinue = () => {
-    if (!featured) {
-      navigate('/characters');
-      return;
-    }
+  const hasStarted = relationshipEntries.some(
+    ({ relationship }) => (relationship?.conversationHistory.length ?? 0) > 0
+  );
+  const featuredTrust = featured?.relationship?.trustLevel ?? 25;
+  const featuredMessages = featured?.relationship?.conversationHistory.length ?? 0;
+  const featuredStatus = featuredMessages > 0 ? '继续这段关系' : '等待第一句话';
+
+  const handleStart = () => {
+    if (!featured) return;
     setCurrentCharacter(featured.character.id);
     navigate('/chat');
   };
 
-  const handleSelect = (characterId: string) => {
-    setCurrentCharacter(characterId);
-    navigate('/chat');
-  };
-
   return (
-    <div className="min-h-screen bg-[#f6f5f2] text-gray-950">
-      <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-5 sm:px-6 sm:py-8">
-        <header className="mb-5 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase text-gray-500">Social Skill Lab</p>
-            <h1 className="mt-1 text-2xl font-bold text-gray-950">关系练习室</h1>
+    <div className="min-h-screen text-gray-950" style={{ backgroundColor: theme.bg }}>
+      <main
+        className="mx-auto min-h-screen w-full max-w-6xl px-4 py-5 sm:px-8 sm:py-8 lg:px-10"
+        style={{ backgroundColor: theme.shell }}
+      >
+        <header className="mb-7 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span
+              className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-black text-white"
+              style={{ backgroundColor: theme.ink }}
+            >
+              *
+            </span>
+            <span className="text-sm font-black" style={{ color: theme.ink }}>关系练习室</span>
           </div>
-          <button
-            onClick={() => navigate('/characters')}
-            className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 shadow-sm transition hover:border-gray-400 active:scale-95"
-          >
-            选择角色
-          </button>
         </header>
 
-        <section className="mb-4 rounded-[8px] border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="flex items-start gap-4">
-            <div className="h-20 w-16 flex-shrink-0 overflow-hidden rounded-[8px] border border-gray-200 bg-gray-100">
-              {featured && (
-                <PixelAvatar
-                  characterId={featured.character.id}
-                  emotion={featured.relationship?.currentEmotion ?? 'neutral'}
-                  name={featured.character.name}
-                />
-              )}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-bold text-gray-950">
-                  {hasStarted ? '继续上一段对话' : '从一个真实的人开始'}
-                </h2>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                  {hasStarted ? '进行中' : '新会话'}
-                </span>
-              </div>
-
-              {featured && (
-                <>
-                  <p className="mt-1 text-sm font-medium text-gray-700">{featured.character.nickname}</p>
-                  <p className="mt-1 line-clamp-2 text-sm leading-6 text-gray-500">
-                    {featured.character.signature || featured.character.background}
-                  </p>
-                  <div className="mt-4 flex items-center gap-3">
-                    <button
-                      onClick={handleContinue}
-                      className="min-w-[104px] whitespace-nowrap rounded-[8px] bg-gray-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800 active:scale-95"
-                    >
-                      开始对话
-                    </button>
-                    <span className="text-xs text-gray-500">
-                      信任度 {(featured.relationship?.trustLevel ?? 25).toFixed(0)}%
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="mb-4 grid grid-cols-3 gap-2">
-          {[
-            ['角色', characters.length.toString(), '可探索'],
-            ['进度', hasStarted ? '继续' : '未开始', hasStarted ? '回到对话' : '选择对象'],
-            ['模式', '练习', '自然对话'],
-          ].map(([label, value, hint]) => (
-            <div key={label} className="rounded-[8px] border border-gray-200 bg-white px-3 py-3 shadow-sm">
-              <p className="text-xs text-gray-500">{label}</p>
-              <p className="mt-1 text-base font-bold text-gray-950">{value}</p>
-              <p className="mt-0.5 text-xs text-gray-400">{hint}</p>
-            </div>
-          ))}
-        </section>
-
-        <section className="mb-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-900">对话对象</h2>
-            <button
-              onClick={() => navigate('/characters')}
-              className="text-xs font-semibold text-gray-500 transition hover:text-gray-900"
+        <section className="grid gap-5 lg:grid-cols-[1fr_0.92fr] lg:items-stretch">
+          <div className="rounded-[28px] border border-black/5 bg-white/75 p-5 shadow-sm sm:p-7 lg:p-8">
+            <div
+              className="mb-8 inline-flex items-center gap-2 rounded-full px-3 py-1.5"
+              style={{ backgroundColor: theme.accentSoft, color: theme.accent }}
             >
-              查看全部
-            </button>
-          </div>
-          <div className="space-y-2">
-            {activeRelationships.slice(0, 3).map(({ character, relationship }) => {
-              const messageCount = relationship?.conversationHistory.length ?? 0;
-              const trustLevel = relationship?.trustLevel ?? 25;
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: theme.accent }} />
+              <span className="text-xs font-black uppercase">daily practice</span>
+            </div>
 
-              return (
-                <button
-                  key={character.id}
-                  onClick={() => handleSelect(character.id)}
-                  className="flex w-full items-center gap-3 rounded-[8px] border border-gray-200 bg-white p-3 text-left shadow-sm transition hover:border-gray-300 hover:bg-gray-50 active:scale-[0.99]"
-                >
-                  <div className="h-14 w-11 flex-shrink-0 overflow-hidden rounded-[6px] bg-gray-100">
+            <h1 className="max-w-2xl text-[42px] font-black leading-[1.02] sm:text-[70px] lg:text-[84px]" style={{ color: theme.ink }}>
+              {theme.title}
+            </h1>
+            <p className="mt-6 max-w-2xl text-base font-semibold leading-7 sm:text-lg" style={{ color: theme.muted }}>
+              {theme.subtitle}
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleStart}
+                className="rounded-full px-6 py-3 text-sm font-black text-white transition active:scale-95"
+                style={{ backgroundColor: theme.ink }}
+              >
+                {hasStarted ? '继续对话' : '开始练习'}
+              </button>
+              <span className="text-sm font-bold" style={{ color: theme.muted }}>
+                当前对象：{featured?.character.nickname ?? '未选择'}
+              </span>
+            </div>
+          </div>
+
+          {featured && (
+            <div className="flex flex-col rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-5">
+              <div className="rounded-[22px] p-4" style={{ backgroundColor: theme.accentSoft }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase" style={{ color: theme.accent }}>selected relation</p>
+                    <h2 className="mt-2 text-3xl font-black leading-tight" style={{ color: theme.ink }}>
+                      {featured.character.nickname}
+                    </h2>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black" style={{ color: theme.ink }}>
+                    {featuredMessages > 0 ? '进行中' : '新会话'}
+                  </span>
+                </div>
+
+                <div className="mt-5 grid grid-cols-[76px_1fr] gap-4">
+                  <div className="h-24 w-[76px] overflow-hidden rounded-[18px] bg-white">
                     <PixelAvatar
-                      characterId={character.id}
-                      emotion={relationship?.currentEmotion ?? 'neutral'}
-                      name={character.name}
+                      characterId={featured.character.id}
+                      emotion={featured.relationship?.currentEmotion ?? 'neutral'}
+                      name={featured.character.name}
                     />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-bold text-gray-950">{character.nickname}</p>
-                      <span className="text-xs text-gray-400">{trustLevel.toFixed(0)}%</span>
-                    </div>
-                    <p className="mt-0.5 truncate text-xs text-gray-500">
-                      {messageCount > 0 ? `${messageCount} 条对话记录` : '等待你开启关系'}
+                  <div className="min-w-0">
+                    <p className="line-clamp-2 text-sm font-semibold leading-6" style={{ color: theme.muted }}>
+                      {featured.character.signature || featured.character.background}
                     </p>
-                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-gray-100">
-                      <div
-                        className="h-full rounded-full bg-emerald-500 transition-all"
-                        style={{ width: `${trustLevel}%` }}
-                      />
-                    </div>
+                    <p className="mt-3 text-xs font-black uppercase" style={{ color: theme.accent }}>
+                      {featuredStatus}
+                    </p>
                   </div>
-                </button>
-              );
-            })}
-          </div>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <div className="mb-2 flex items-center justify-between text-xs font-black" style={{ color: theme.muted }}>
+                  <span>Trust</span>
+                  <span>{featuredTrust.toFixed(0)}%</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${featuredTrust}%`, backgroundColor: theme.accent }}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-3 gap-2">
+                {relationshipEntries.map(({ character, relationship }) => {
+                  const isSelected = featured.character.id === character.id;
+                  return (
+                    <button
+                      key={character.id}
+                      onClick={() => setSelectedCharacterId(character.id)}
+                      className="rounded-[18px] border p-2.5 text-left transition active:scale-[0.98]"
+                      style={{
+                        backgroundColor: isSelected ? theme.ink : theme.shell,
+                        borderColor: isSelected ? theme.ink : 'rgba(0,0,0,0.06)',
+                        color: isSelected ? '#fff' : theme.ink,
+                      }}
+                    >
+                      <div className="mx-auto h-12 w-9 overflow-hidden rounded-[8px] bg-white">
+                        <PixelAvatar
+                          characterId={character.id}
+                          emotion={relationship?.currentEmotion ?? 'neutral'}
+                          name={character.name}
+                        />
+                      </div>
+                      <p className="mt-2 truncate text-center text-[10px] font-black">{character.nickname}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
-        <section className="mb-6 rounded-[8px] border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-900">今日练习</h2>
-            <span className="text-xs text-gray-400">轻量提示</span>
-          </div>
-          <div className="space-y-3">
-            {tips.slice(0, 3).map((tip) => (
-              <div key={tip.id} className="border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{tip.icon}</span>
-                  <p className="text-sm font-semibold text-gray-900">{tip.title}</p>
-                </div>
-                <p className="mt-1 text-xs leading-5 text-gray-500">{tip.description}</p>
-              </div>
-            ))}
-          </div>
+        <section className="mt-5 rounded-[24px] bg-white/75 p-5 shadow-sm">
+            <p className="text-xs font-black uppercase" style={{ color: theme.accent }}>next step</p>
+            <h2 className="mt-4 text-2xl font-black leading-8" style={{ color: theme.ink }}>
+              {featuredMessages > 0 ? '回到上一段关系里' : '先说一句自然的话'}
+            </h2>
+            <p className="mt-3 text-sm font-semibold leading-6" style={{ color: theme.muted }}>
+              这里不是评分面板，而是一个可以慢慢试错的关系练习空间。
+            </p>
         </section>
       </main>
     </div>

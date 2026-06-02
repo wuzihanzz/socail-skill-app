@@ -63,11 +63,11 @@ const Chat: React.FC = () => {
   }, [relationship, loading]);
 
   if (!currentCharacterId) {
-    return <div className="p-4 text-center text-sm text-gray-500">正在载入</div>;
+    return <div className="bg-[#eef3ed] p-4 text-center text-sm text-[#66756b]">正在载入</div>;
   }
 
   if (!character || !relationship) {
-    return <div className="p-4 text-center text-sm text-gray-500">角色不存在</div>;
+    return <div className="bg-[#eef3ed] p-4 text-center text-sm text-[#66756b]">角色不存在</div>;
   }
 
   const handleSend = async () => {
@@ -201,28 +201,28 @@ const Chat: React.FC = () => {
   const hasMessages = relationship.conversationHistory.length > 0;
 
   return (
-    <div className="mx-auto flex h-screen w-full max-w-3xl flex-col bg-[#f6f5f2] text-gray-950">
-      <header className="flex-shrink-0 border-b border-gray-200 bg-white/85 px-4 pt-3 backdrop-blur">
+    <div className="mx-auto flex h-screen w-full max-w-3xl flex-col bg-[#eef3ed] text-[#1f3128]">
+      <header className="flex-shrink-0 border-b border-[#d9e4dc] bg-[#fbfdf8]/90 px-4 pt-3 backdrop-blur">
         <div className="mb-2.5 flex items-center gap-3">
           <button
             onClick={() => navigate('/characters')}
-            className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 transition hover:border-gray-300 active:scale-95"
+            className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95"
           >
             返回
           </button>
 
-          <div className="h-10 w-8 flex-shrink-0 overflow-hidden rounded-[6px] bg-gray-100">
+          <div className="h-10 w-8 flex-shrink-0 overflow-hidden rounded-[8px] bg-white">
             <PixelAvatar characterId={character.id} emotion={relationship.currentEmotion} name={character.name} />
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-bold text-gray-950">{character.nickname}</div>
-            <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <div className="truncate text-sm font-black text-[#1f3128]">{character.nickname}</div>
+            <div className="mt-0.5 flex items-center gap-2 text-xs text-[#66756b]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#4f735f]" />
               <span className="whitespace-nowrap">{trustLabel}</span>
-              <div className="h-1 w-12 flex-shrink-0 overflow-hidden rounded-full bg-gray-100">
+              <div className="h-1 w-12 flex-shrink-0 overflow-hidden rounded-full bg-[#dce9df]">
                 <div
-                  className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                  className="h-full rounded-full bg-[#4f735f] transition-all duration-500"
                   style={{ width: `${trustLevel}%` }}
                 />
               </div>
@@ -232,7 +232,7 @@ const Chat: React.FC = () => {
 
           <button
             onClick={() => navigate('/profile')}
-            className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 transition hover:border-gray-300 active:scale-95"
+            className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95"
           >
             档案
           </button>
@@ -242,11 +242,11 @@ const Chat: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-4 py-5">
         {!hasMessages && (
           <div className="mx-auto mt-10 flex max-w-xs flex-col items-center text-center">
-            <div className="mb-4 h-24 w-20 overflow-hidden rounded-[8px] bg-white shadow-sm">
+            <div className="mb-4 h-24 w-20 overflow-hidden rounded-[18px] bg-white shadow-sm">
               <PixelAvatar characterId={character.id} emotion="neutral" name={character.name} />
             </div>
-            <p className="mb-1 text-sm font-bold text-gray-900">{character.nickname}</p>
-            <p className="text-xs leading-5 text-gray-500">
+            <p className="mb-1 text-sm font-black text-[#1f3128]">{character.nickname}</p>
+            <p className="text-xs font-semibold leading-5 text-[#66756b]">
               先从一句自然的问候开始，看看对方今天愿意聊什么
             </p>
           </div>
@@ -268,14 +268,14 @@ const Chat: React.FC = () => {
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:150ms]" />
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:300ms]" />
             </div>
-            <span className="text-xs text-gray-400">{character.nickname}正在思考</span>
+            <span className="text-xs text-[#66756b]">{character.nickname}正在思考</span>
           </div>
         )}
 
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="flex-shrink-0 border-t border-gray-200 bg-white px-4 pb-4 pt-3">
+      <div className="flex-shrink-0 border-t border-[#d9e4dc] bg-[#fbfdf8] px-4 pb-4 pt-3">
         {conversationTips.length > 0 && !loading && (
           <div className="mb-3">
             <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -283,7 +283,7 @@ const Chat: React.FC = () => {
                 <button
                   key={i}
                   onClick={() => setInput(tip)}
-                  className="max-w-[240px] flex-shrink-0 truncate rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95"
+                  className="max-w-[240px] flex-shrink-0 truncate rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-xs font-semibold text-[#66756b] transition hover:border-[#4f735f] hover:bg-[#dce9df] hover:text-[#1f3128] active:scale-95"
                 >
                   {tip}
                 </button>
@@ -300,12 +300,12 @@ const Chat: React.FC = () => {
             placeholder={`对 ${character.nickname} 说点什么`}
             disabled={loading}
             rows={2}
-            className="max-h-28 min-h-11 flex-1 resize-none rounded-[8px] border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-5 text-gray-900 placeholder-gray-400 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+            className="max-h-28 min-h-11 flex-1 resize-none rounded-[14px] border border-[#d9e4dc] bg-white px-3 py-2.5 text-sm leading-5 text-[#1f3128] placeholder-[#8b968f] transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#4f735f] disabled:opacity-50"
           />
           <button
             onClick={handleSend}
             disabled={loading || !input.trim()}
-            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[8px] bg-gray-950 text-white transition hover:bg-gray-800 active:scale-95 disabled:bg-gray-200"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[14px] bg-[#1f3128] text-white transition hover:bg-[#2d4538] active:scale-95 disabled:bg-[#d9e4dc]"
             aria-label="发送"
           >
             {loading ? (
