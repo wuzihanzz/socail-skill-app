@@ -11,8 +11,8 @@ const theme = {
   accentSoft: '#dce9df',
   ink: '#1f3128',
   muted: '#66756b',
-  title: '今天练习一次连接',
-  subtitle: '从倾听、追问、道歉或表达边界开始，让对话有一个温柔的下一步。',
+  title: '把对话说得更靠近',
+  subtitle: '从一句问候、一次倾听、一个道歉开始，慢慢练习让关系往前走一步。',
 };
 
 const Home: React.FC = () => {

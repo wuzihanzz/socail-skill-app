@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GameState, RelationshipState, Message } from '../types/index';
+import type { ConflictState, GameState, RelationshipState, Message } from '../types/index';
 import characters from '../data/characters';
 import { createMemoryWing, normalizeMemoryWing } from '../engine/memoryEngine';
 
@@ -15,6 +15,8 @@ const initializeRelationships = (): Record<string, RelationshipState> => {
       trustLevel: 25, // Start with some baseline
       satisfactionLevel: 50,
       currentEmotion: 'neutral',
+      conflictState: 'none',
+      repairAttempts: 0,
       unlockedSkills: char.skills
         .filter((s) => s.alwaysVisible)
         .map((s) => s.id),
@@ -43,7 +45,9 @@ interface Store extends GameState {
   updateTrustLevel: (
     characterId: string,
     delta: number,
-    emotion?: 'neutral' | 'happy' | 'upset'
+    emotion?: 'neutral' | 'happy' | 'upset',
+    conflictState?: ConflictState,
+    conflictSummary?: string
   ) => void;
   unlockSkill: (characterId: string, skillId: string) => void;
   setTodayEventTriggered: (characterId: string, triggered: boolean) => void;
@@ -97,7 +101,9 @@ export const useGameStore = create<Store>((set) => ({
   updateTrustLevel: (
     characterId: string,
     delta: number,
-    emotion?: 'neutral' | 'happy' | 'upset'
+    emotion?: 'neutral' | 'happy' | 'upset',
+    conflictState?: ConflictState,
+    conflictSummary?: string
   ) =>
     set((state) => {
       const newRelationships = { ...state.relationships };
@@ -126,6 +132,18 @@ export const useGameStore = create<Store>((set) => ({
 
         if (emotion) {
           relationship.currentEmotion = emotion;
+        }
+
+        if (conflictState) {
+          relationship.conflictState = deriveConflictState(relationship, conflictState, delta);
+          relationship.repairAttempts =
+            conflictState === 'repairing' ? relationship.repairAttempts + 1 : 0;
+
+          if (conflictSummary) {
+            relationship.lastConflictSummary = conflictSummary;
+          } else if (relationship.conflictState === 'none') {
+            relationship.lastConflictSummary = undefined;
+          }
         }
       }
 
@@ -263,6 +281,8 @@ export const useGameStore = create<Store>((set) => ({
           trustLevel: 25,
           satisfactionLevel: 50,
           currentEmotion: 'neutral',
+          conflictState: 'none',
+          repairAttempts: 0,
           unlockedSkills: character.skills
             .filter((s) => s.alwaysVisible)
             .map((s) => s.id),
@@ -320,6 +340,9 @@ const normalizeStoredState = (state: GameState): GameState => {
         character.id,
         character.nickname
       ),
+      conflictState: relationship.conflictState ?? defaults[character.id].conflictState,
+      lastConflictSummary: relationship.lastConflictSummary,
+      repairAttempts: relationship.repairAttempts ?? 0,
     };
   });
 
@@ -331,6 +354,18 @@ const normalizeStoredState = (state: GameState): GameState => {
         ? relationships[state.currentCharacterId].conversationHistory
         : state.conversationHistory ?? [],
   };
+};
+
+const deriveConflictState = (
+  relationship: RelationshipState,
+  nextConflictState: ConflictState,
+  delta: number
+): ConflictState => {
+  if (nextConflictState !== 'repairing') return nextConflictState;
+
+  if (relationship.conflictState === 'none') return 'none';
+  if (relationship.repairAttempts >= 1 && delta > 1) return 'none';
+  return 'repairing';
 };
 
 // Load from storage on app start

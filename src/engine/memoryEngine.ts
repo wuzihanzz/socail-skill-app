@@ -347,6 +347,11 @@ const scoreDrawer = (
   let score = drawer.importance + tagHits * 7 + recency * 0.3 - recentlyMentionedPenalty;
   if (asksForMemory) score += 4;
   if (emotion === 'upset' && (roomType === 'conflict' || roomType === 'unresolved')) score += 5;
+  if (roomType === 'conflict' && drawer.emotionalTone === 'repaired' && asksForMemory) score += 8;
+  if (roomType === 'conflict' && drawer.emotionalTone === 'repaired' && currentTags.includes('apology')) score += 6;
+  if (roomType === 'conflict' && /(无聊|垃圾|烦人|傻|白痴|攻击|羞辱|贬低|冒犯)/.test(drawer.content)) {
+    score += 3;
+  }
   if (roomType === 'user-profile' && tagHits > 0) score += 2;
   if (roomType === 'relationship') score += 1;
   return score;

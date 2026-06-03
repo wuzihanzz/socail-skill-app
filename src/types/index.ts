@@ -79,11 +79,16 @@ export interface Character {
 }
 
 // User-Character Relationship
+export type ConflictState = 'none' | 'awkward' | 'hurt' | 'defensive' | 'withdrawn' | 'repairing';
+
 export interface RelationshipState {
   characterId: string;
   trustLevel: number; // 0-100
   satisfactionLevel: number; // 0-100
   currentEmotion: 'neutral' | 'happy' | 'upset';
+  conflictState: ConflictState;
+  lastConflictSummary?: string;
+  repairAttempts: number;
   unlockedSkills: string[]; // skill IDs
   conversationHistory: Message[];
   memoryWing: MemoryWing;

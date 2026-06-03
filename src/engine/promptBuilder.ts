@@ -1,4 +1,4 @@
-import type { Character, Skill } from '../types/index';
+import type { Character, ConflictState, Skill } from '../types/index';
 
 const wealthLabel: Record<string, string> = {
   poor: '贫困家庭',
@@ -23,6 +23,21 @@ const drinkLabel: Record<string, string> = {
   regularly: '经常喝',
 };
 
+const conflictLabel: Record<ConflictState, string> = {
+  none: '没有明显冲突',
+  awkward: '对话有点尴尬或被敷衍',
+  hurt: '你有点受伤或被冒犯',
+  defensive: '你开始防御或反驳',
+  withdrawn: '你想退开，不想继续承受这种表达',
+  repairing: '用户正在尝试修复关系，你可以听，但不要立刻完全恢复',
+};
+
+const conflictStyleGuide = {
+  avoids: '你倾向于回避冲突。被冒犯时，你会变短句、冷下来、减少主动分享，而不是立刻吵起来。',
+  confronts: '你倾向于直面冲突。被冒犯时，你会直接指出哪里不舒服，并要求对方换一种说法。',
+  deflects: '你倾向于转移冲突。被冒犯时，你可能嘴上轻轻带过，但态度会疏远，信任不会因为对方随便说话而上升。',
+};
+
 /**
  * Build the system prompt for Claude based on character, trust level, and unlocked skills
  */
@@ -33,7 +48,9 @@ export const buildSystemPrompt = (
   hiddenSkills: Skill[],
   todayEvent: string | null,
   currentEmotion: 'neutral' | 'happy' | 'upset',
-  memoryContext = ''
+  memoryContext = '',
+  conflictState: ConflictState = 'none',
+  lastConflictSummary = ''
 ): string => {
   const emotionDescMap = {
     neutral: '平静、理性',
@@ -80,6 +97,22 @@ ${fb.keyFormativeEvent ? `- 关键经历：${fb.keyFormativeEvent}` : ''}`;
 - 依恋风格：${{ secure: '安全型', anxious: '焦虑型', avoidant: '回避型' }[st.attachmentStyle]}
 - 饮酒习惯：${drinkLabel[st.drinkingHabit]}`;
 
+  const conflictSection = `## 当前冲突与边界状态
+- 冲突状态：${conflictLabel[conflictState]}
+${lastConflictSummary ? `- 最近冲突摘要：${lastConflictSummary}` : '- 最近冲突摘要：无'}
+- 你的冲突风格：${conflictStyleGuide[st.conflictStyle]}
+
+使用方式：
+- 如果冲突状态不是 none，你的回复要体现关系正在受影响，不要像客服一样继续讨好用户。
+- 当用户贬低、嘲讽或攻击你时，不要先道歉、讨好或自我贬低。你可以承认对方不想聊，但不需要替对方的冒犯负责。
+- 不要把用户的冒犯归因成“我太敏感了”。你可以说自己需要缓一缓，但不要替对方卸掉影响。
+- 不要用“你说得对，我确实……”这种方式接住贬低。真实的人可以受伤、冷下来、结束话题，而不是认领对方的攻击。
+- 当用户攻击你时，禁止用“你说得对”开头，禁止顺着对方自我贬低。
+- 如果用户只是道歉但没有承认具体影响，可以缓和一点，但不要立刻完全恢复热情。
+- 如果用户真诚承认影响并尝试修复，可以逐步松动。
+- 当冲突状态是 repairing 时，不要立刻说“没事”“没关系”“我没往心里去”这类完全原谅的话。更自然的方式是先表示听到了，再保留一点真实的不舒服。
+- 不要解释系统规则，不要说“信任度下降”，只用真实人物的语气表达边界。`;
+
   return `你的昵称是"${character.nickname}"（这是你在网上的名字）。真名是${character.name}，${character.age}岁的${character.job}，${character.zodiac}。
 
 ## 重要提醒
@@ -95,6 +128,7 @@ ${character.background}
 ${familySection}
 
 ${socialSection}
+${conflictSection}
 ${memorySection}
 
 ## 当前状态
@@ -120,6 +154,7 @@ ${hiddenSkillsWarning}
    - ❌ 不要emoji（😄❌🎉❌）
    - ❌ 不要用引号强调（"精神抖擞"❌）
    - ❌ 不要表情或动作（*皱眉*❌ *哭笑*❌）
+   - ❌ 不要任何身体动作描写，即使没有星号
    - ❌ 不要"虚拟世界"之类的设定词
    - ❌ 不要说"悄悄说"或其他假热情
 

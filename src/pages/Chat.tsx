@@ -7,9 +7,14 @@ import ChatBubble from '../components/ChatBubble';
 import { buildSystemPrompt } from '../engine/promptBuilder';
 import { getUnlockedSkills, getHiddenSkills } from '../engine/skillEngine';
 import { generateTodayEvent } from '../engine/eventGenerator';
-import { calculateTrustDelta, isHarmfulMessage } from '../engine/trustEngine';
+import {
+  calculateTrustDelta,
+  combineTrustDeltas,
+  isHarmfulMessage,
+  mapSatisfactionToTrustDelta,
+} from '../engine/trustEngine';
 import { sendMessage } from '../engine/claudeClient';
-import { generateConversationTips } from '../engine/conversationHelper';
+import { generateConversationTips, type ConversationTip } from '../engine/conversationHelper';
 import { buildMemoryContext, updateMemoryFromTurn } from '../engine/memoryEngine';
 
 const splitAssistantMessages = (value: unknown): string[] => {
@@ -29,6 +34,7 @@ const Chat: React.FC = () => {
     addMessage,
     updateTrustLevel,
     setTodayEventTriggered,
+    setFirstMessageSent,
     markAskedAbout,
     updateMemoryWing,
   } = useGameStore();
@@ -36,7 +42,7 @@ const Chat: React.FC = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [todayEvent, setTodayEvent] = useState<string | null>(null);
-  const [conversationTips, setConversationTips] = useState<string[]>([]);
+  const [selectedTip, setSelectedTip] = useState<ConversationTip | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const character = currentCharacterId ? characters.find((c) => c.id === currentCharacterId) : null;
@@ -74,8 +80,10 @@ const Chat: React.FC = () => {
     if (!input.trim() || loading) return;
     const userMessage = input.trim();
     setInput('');
+    setSelectedTip(null);
 
     addMessage(currentCharacterId, { role: 'user', content: userMessage, timestamp: Date.now() });
+    if (!relationship.firstMessageSent) setFirstMessageSent(currentCharacterId, true);
 
     if (isHarmfulMessage(userMessage)) {
       addMessage(currentCharacterId, {
@@ -83,22 +91,27 @@ const Chat: React.FC = () => {
         content: '我需要一点时间。也许我们改天再聊',
         timestamp: Date.now(),
       });
-      updateTrustLevel(currentCharacterId, -15, 'upset');
+      updateTrustLevel(currentCharacterId, -6, 'upset', 'withdrawn', '用户说了严重伤害或威胁性的话');
       return;
     }
 
-    const { trustDelta, emotionChange } = calculateTrustDelta(userMessage, '', !relationship.firstMessageSent);
+    const trustAnalysis = calculateTrustDelta(userMessage, '', !relationship.firstMessageSent);
+    const promptConflictState =
+      trustAnalysis.conflictState !== 'none' ? trustAnalysis.conflictState : relationship.conflictState;
+    const promptConflictSummary = trustAnalysis.conflictSummary ?? relationship.lastConflictSummary;
     const unlockedSkills = getUnlockedSkills(character, relationship.trustLevel, relationship.unlockedSkills);
     const hiddenSkills = getHiddenSkills(character, relationship.trustLevel, relationship.unlockedSkills);
     const memoryContext = buildMemoryContext(relationship.memoryWing, userMessage, relationship.currentEmotion);
     const systemPrompt = buildSystemPrompt(
       character,
-      relationship.trustLevel + trustDelta,
+      relationship.trustLevel + trustAnalysis.trustDelta,
       unlockedSkills,
       hiddenSkills,
       todayEvent,
-      emotionChange,
-      memoryContext
+      trustAnalysis.emotionChange,
+      memoryContext,
+      promptConflictState,
+      promptConflictSummary
     );
 
     setLoading(true);
@@ -129,11 +142,25 @@ const Chat: React.FC = () => {
       }
       if (chunks.length === 0) chunks = [aiResponse];
 
-      const mappedLLMDelta = (satisfactionDelta - 3) * 4;
-      const finalTrustDelta = trustDelta * 0.4 + mappedLLMDelta * 0.6;
-      let finalEmotion: 'neutral' | 'happy' | 'upset' = emotionChange;
+      const mappedLLMDelta = mapSatisfactionToTrustDelta(satisfactionDelta);
+      const finalTrustDelta = combineTrustDeltas(trustAnalysis.trustDelta, mappedLLMDelta);
+      let finalEmotion: 'neutral' | 'happy' | 'upset' = trustAnalysis.emotionChange;
       if (satisfactionDelta >= 4) finalEmotion = 'happy';
       else if (satisfactionDelta <= 2) finalEmotion = 'upset';
+      const finalConflictState =
+        trustAnalysis.conflictState !== 'none'
+          ? trustAnalysis.conflictState
+          : finalTrustDelta <= -5
+            ? 'withdrawn'
+            : finalTrustDelta <= -3
+              ? 'hurt'
+              : finalTrustDelta < 0
+              ? 'awkward'
+              : relationship.conflictState !== 'none'
+                ? finalTrustDelta > 1
+                  ? 'repairing'
+                  : relationship.conflictState
+                : 'none';
 
       updateMemoryWing(currentCharacterId, (latestRelationship) =>
         updateMemoryFromTurn(latestRelationship.memoryWing, {
@@ -174,8 +201,14 @@ const Chat: React.FC = () => {
 
       const totalDelay = chunks.length > 1 ? (chunks.length - 1) * 300 + 100 : 100;
       setTimeout(() => {
-        updateTrustLevel(currentCharacterId, finalTrustDelta, finalEmotion);
-        setConversationTips(generateConversationTips(chunks[chunks.length - 1]));
+        updateTrustLevel(
+          currentCharacterId,
+          finalTrustDelta,
+          finalEmotion,
+          finalConflictState,
+          trustAnalysis.conflictSummary
+        );
+        setSelectedTip(null);
         setLoading(false);
       }, totalDelay);
     } catch (err) {
@@ -199,6 +232,16 @@ const Chat: React.FC = () => {
   const trustLevel = relationship.trustLevel;
   const trustLabel = trustLevel < 30 ? '陌生' : trustLevel < 50 ? '认识' : trustLevel < 70 ? '信任' : '深度信任';
   const hasMessages = relationship.conversationHistory.length > 0;
+  const lastAssistantMessage = [...relationship.conversationHistory].reverse().find((msg) => msg.role === 'assistant');
+  const lastUserMessage = [...relationship.conversationHistory].reverse().find((msg) => msg.role === 'user');
+  const conversationTips = generateConversationTips(lastAssistantMessage?.content ?? '', {
+    trustLevel: relationship.trustLevel,
+    emotion: relationship.currentEmotion,
+    conflictState: relationship.conflictState,
+    lastUserMessage: lastUserMessage?.content,
+    lastTrustDelta: lastAssistantMessage?.trustDelta,
+  });
+  const visibleSelectedTip = conversationTips.some((tip) => tip.id === selectedTip?.id) ? selectedTip : null;
 
   return (
     <div className="mx-auto flex h-screen w-full max-w-3xl flex-col bg-[#eef3ed] text-[#1f3128]">
@@ -279,16 +322,61 @@ const Chat: React.FC = () => {
         {conversationTips.length > 0 && !loading && (
           <div className="mb-3">
             <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {conversationTips.map((tip, i) => (
+              {conversationTips.map((tip) => (
                 <button
-                  key={i}
-                  onClick={() => setInput(tip)}
-                  className="max-w-[240px] flex-shrink-0 truncate rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-xs font-semibold text-[#66756b] transition hover:border-[#4f735f] hover:bg-[#dce9df] hover:text-[#1f3128] active:scale-95"
+                  key={tip.id}
+                  onClick={() => setSelectedTip(selectedTip?.id === tip.id ? null : tip)}
+                  className={`max-w-[240px] flex-shrink-0 truncate rounded-full border px-3 py-1.5 text-xs font-semibold transition active:scale-95 ${
+                    visibleSelectedTip?.id === tip.id
+                      ? 'border-[#4f735f] bg-[#dce9df] text-[#1f3128] shadow-sm'
+                      : 'border-[#d9e4dc] bg-white text-[#66756b] hover:border-[#4f735f] hover:bg-[#dce9df] hover:text-[#1f3128]'
+                  }`}
                 >
-                  {tip}
+                  {tip.label}
                 </button>
               ))}
             </div>
+
+            {visibleSelectedTip && (
+              <div className="mt-2 animate-[tip-pop_180ms_ease-out] rounded-[16px] border border-[#d9e4dc] bg-white p-3 shadow-[0_12px_32px_rgba(31,49,40,0.08)]">
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-[#1f3128]">{visibleSelectedTip.title}</p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-[#66756b]">可以从这些方向回复：</p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedTip(null)}
+                    className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-[#d9e4dc] text-[#66756b] transition hover:border-[#4f735f] hover:text-[#1f3128]"
+                    aria-label="关闭启发"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="grid gap-1.5 sm:grid-cols-3">
+                  {visibleSelectedTip.guidance.map((item) => (
+                    <div
+                      key={item}
+                      className="rounded-[10px] bg-[#eef3ed] px-2.5 py-2 text-xs font-semibold leading-5 text-[#405147]"
+                    >
+                      {item}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-2 rounded-[12px] border border-[#d9e4dc] bg-[#fbfdf8] px-3 py-2">
+                  <p className="text-[11px] font-black uppercase tracking-[0.08em] text-[#8b968f]">可以这样起稿</p>
+                  <p className="mt-1 text-sm font-semibold leading-6 text-[#1f3128]">{visibleSelectedTip.example}</p>
+                </div>
+
+                <button
+                  onClick={() => setInput(visibleSelectedTip.example)}
+                  className="mt-2 w-full rounded-[12px] bg-[#1f3128] px-3 py-2 text-sm font-black text-white transition hover:bg-[#2d4538] active:scale-[0.99]"
+                >
+                  填入这句，再自己改改
+                </button>
+              </div>
+            )}
           </div>
         )}
 
