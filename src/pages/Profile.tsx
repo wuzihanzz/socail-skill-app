@@ -4,6 +4,7 @@ import characters from '../data/characters';
 import { useGameStore } from '../store/gameStore';
 import PixelAvatar from '../components/PixelAvatar';
 import { getUnlockedSkills } from '../engine/skillEngine';
+import { getRelationshipStage } from '../engine/relationshipMilestones';
 
 const Profile: React.FC = () => {
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ const Profile: React.FC = () => {
   const askedAbout = relationship.askedAbout ?? { name: false, age: false, job: false, mbti: false, zodiac: false };
   const unlockedSkills = getUnlockedSkills(character, relationship.trustLevel, relationship.unlockedSkills);
   const trustLevel = relationship.trustLevel;
-  const trustLabel = trustLevel < 30 ? '陌生' : trustLevel < 50 ? '认识' : trustLevel < 70 ? '信任' : '深度信任';
+  const trustLabel = getRelationshipStage(trustLevel).label;
   const memoryCount = Object.values(relationship.memoryWing?.rooms ?? {}).reduce(
     (sum, room) => sum + room.drawers.length,
     0

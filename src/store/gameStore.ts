@@ -17,6 +17,7 @@ const initializeRelationships = (): Record<string, RelationshipState> => {
       currentEmotion: 'neutral',
       conflictState: 'none',
       repairAttempts: 0,
+      achievedMilestones: [10, 20],
       unlockedSkills: char.skills
         .filter((s) => s.alwaysVisible)
         .map((s) => s.id),
@@ -49,6 +50,7 @@ interface Store extends GameState {
     conflictState?: ConflictState,
     conflictSummary?: string
   ) => void;
+  markTrustMilestones: (characterId: string, milestones: number[]) => void;
   unlockSkill: (characterId: string, skillId: string) => void;
   setTodayEventTriggered: (characterId: string, triggered: boolean) => void;
   setFirstMessageSent: (characterId: string, sent: boolean) => void;
@@ -145,6 +147,29 @@ export const useGameStore = create<Store>((set) => ({
             relationship.lastConflictSummary = undefined;
           }
         }
+      }
+
+      const newState = {
+        ...state,
+        relationships: newRelationships,
+      };
+      saveToStorage(newState);
+      return newState;
+    }),
+
+  markTrustMilestones: (characterId: string, milestones: number[]) =>
+    set((state) => {
+      if (milestones.length === 0) return state;
+
+      const newRelationships = { ...state.relationships };
+      const relationship = newRelationships[characterId];
+      if (relationship) {
+        const achieved = new Set(relationship.achievedMilestones ?? []);
+        milestones.forEach((milestone) => achieved.add(milestone));
+        newRelationships[characterId] = {
+          ...relationship,
+          achievedMilestones: [...achieved].sort((a, b) => a - b),
+        };
       }
 
       const newState = {
@@ -283,6 +308,7 @@ export const useGameStore = create<Store>((set) => ({
           currentEmotion: 'neutral',
           conflictState: 'none',
           repairAttempts: 0,
+          achievedMilestones: [10, 20],
           unlockedSkills: character.skills
             .filter((s) => s.alwaysVisible)
             .map((s) => s.id),
@@ -340,11 +366,14 @@ const normalizeStoredState = (state: GameState): GameState => {
         character.id,
         character.nickname
       ),
-      conflictState: relationship.conflictState ?? defaults[character.id].conflictState,
-      lastConflictSummary: relationship.lastConflictSummary,
-      repairAttempts: relationship.repairAttempts ?? 0,
-    };
-  });
+          conflictState: relationship.conflictState ?? defaults[character.id].conflictState,
+          lastConflictSummary: relationship.lastConflictSummary,
+          repairAttempts: relationship.repairAttempts ?? 0,
+          achievedMilestones:
+            relationship.achievedMilestones ??
+            defaults[character.id].achievedMilestones,
+        };
+      });
 
   return {
     ...state,

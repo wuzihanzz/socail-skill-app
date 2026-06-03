@@ -16,14 +16,71 @@ import {
 import { sendMessage } from '../engine/claudeClient';
 import { generateConversationTips, type ConversationTip } from '../engine/conversationHelper';
 import { buildMemoryContext, updateMemoryFromTurn } from '../engine/memoryEngine';
+import {
+  createMilestoneNotice,
+  getCrossedTrustMilestones,
+  getRelationshipStage,
+} from '../engine/relationshipMilestones';
+
+const splitLongAssistantPart = (part: string): string[] => {
+  const maxLength = 34;
+  if (part.length <= maxLength) return [part];
+
+  const clauses = part
+    .split(/(?<=[，,、；;])\s*/)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+
+  if (clauses.length <= 1) {
+    return part.match(new RegExp(`.{1,${maxLength}}`, 'g')) ?? [part];
+  }
+
+  const chunks: string[] = [];
+  let current = '';
+
+  clauses.forEach((clause) => {
+    if (current && `${current}${clause}`.length > maxLength) {
+      chunks.push(current.trim());
+      current = clause;
+      return;
+    }
+    current = `${current}${clause}`;
+  });
+
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.flatMap((chunk) => (chunk.length > maxLength ? chunk.match(new RegExp(`.{1,${maxLength}}`, 'g')) ?? [chunk] : [chunk]));
+};
+
+const normalizeAssistantChunks = (chunks: string[]): string[] => {
+  const result: string[] = [];
+
+  chunks.forEach((chunk) => {
+    const cleaned = chunk.replace(/[。！？!?]$/, '').trim();
+    if (!cleaned) return;
+
+    const previous = result[result.length - 1];
+    if (previous && previous.length <= 5 && previous.length + cleaned.length <= 34) {
+      result[result.length - 1] = `${previous}${cleaned}`;
+      return;
+    }
+
+    result.push(cleaned);
+  });
+
+  return result;
+};
 
 const splitAssistantMessages = (value: unknown): string[] => {
   if (typeof value !== 'string') return [];
-  return value
+  const chunks = value
     .replace(/\r\n/g, '\n')
     .split(/\n{2,}/)
-    .map((part) => part.replace(/\n+/g, '\n').trim())
-    .filter(Boolean);
+    .flatMap((block) => block.replace(/\n+/g, '\n').split(/\n+|(?<=[。！？!?])\s*/))
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .flatMap(splitLongAssistantPart);
+
+  return normalizeAssistantChunks(chunks);
 };
 
 const Chat: React.FC = () => {
@@ -36,6 +93,7 @@ const Chat: React.FC = () => {
     setTodayEventTriggered,
     setFirstMessageSent,
     markAskedAbout,
+    markTrustMilestones,
     updateMemoryWing,
   } = useGameStore();
 
@@ -43,6 +101,7 @@ const Chat: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [todayEvent, setTodayEvent] = useState<string | null>(null);
   const [selectedTip, setSelectedTip] = useState<ConversationTip | null>(null);
+  const [milestoneNotice, setMilestoneNotice] = useState<{ title: string; body: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const character = currentCharacterId ? characters.find((c) => c.id === currentCharacterId) : null;
@@ -81,6 +140,7 @@ const Chat: React.FC = () => {
     const userMessage = input.trim();
     setInput('');
     setSelectedTip(null);
+    setMilestoneNotice(null);
 
     addMessage(currentCharacterId, { role: 'user', content: userMessage, timestamp: Date.now() });
     if (!relationship.firstMessageSent) setFirstMessageSent(currentCharacterId, true);
@@ -144,6 +204,12 @@ const Chat: React.FC = () => {
 
       const mappedLLMDelta = mapSatisfactionToTrustDelta(satisfactionDelta);
       const finalTrustDelta = combineTrustDeltas(trustAnalysis.trustDelta, mappedLLMDelta);
+      const projectedTrustLevel = Math.max(0, Math.min(100, relationship.trustLevel + finalTrustDelta));
+      const crossedMilestones = getCrossedTrustMilestones(
+        relationship.trustLevel,
+        projectedTrustLevel,
+        relationship.achievedMilestones
+      );
       let finalEmotion: 'neutral' | 'happy' | 'upset' = trustAnalysis.emotionChange;
       if (satisfactionDelta >= 4) finalEmotion = 'happy';
       else if (satisfactionDelta <= 2) finalEmotion = 'upset';
@@ -208,6 +274,13 @@ const Chat: React.FC = () => {
           finalConflictState,
           trustAnalysis.conflictSummary
         );
+        if (crossedMilestones.length > 0) {
+          markTrustMilestones(
+            currentCharacterId,
+            crossedMilestones.map((milestone) => milestone.threshold)
+          );
+          setMilestoneNotice(createMilestoneNotice(character, crossedMilestones[crossedMilestones.length - 1]));
+        }
         setSelectedTip(null);
         setLoading(false);
       }, totalDelay);
@@ -230,7 +303,7 @@ const Chat: React.FC = () => {
   };
 
   const trustLevel = relationship.trustLevel;
-  const trustLabel = trustLevel < 30 ? '陌生' : trustLevel < 50 ? '认识' : trustLevel < 70 ? '信任' : '深度信任';
+  const trustLabel = getRelationshipStage(trustLevel).label;
   const hasMessages = relationship.conversationHistory.length > 0;
   const lastAssistantMessage = [...relationship.conversationHistory].reverse().find((msg) => msg.role === 'assistant');
   const lastUserMessage = [...relationship.conversationHistory].reverse().find((msg) => msg.role === 'user');
@@ -312,6 +385,14 @@ const Chat: React.FC = () => {
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:300ms]" />
             </div>
             <span className="text-xs text-[#66756b]">{character.nickname}正在思考</span>
+          </div>
+        )}
+
+        {milestoneNotice && !loading && (
+          <div className="mx-auto my-4 max-w-sm rounded-[18px] border border-[#cbded0] bg-[#fbfdf8] px-4 py-3 text-center shadow-[0_12px_32px_rgba(31,49,40,0.08)]">
+            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#6f8b76]">关系变化</p>
+            <p className="mt-1 text-sm font-black text-[#1f3128]">{milestoneNotice.title}</p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-[#66756b]">{milestoneNotice.body}</p>
           </div>
         )}
 

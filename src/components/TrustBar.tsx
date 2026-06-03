@@ -1,5 +1,6 @@
 import React from 'react';
 import './TrustBar.css';
+import { getRelationshipStage } from '../engine/relationshipMilestones';
 
 interface TrustBarProps {
   trustLevel: number;
@@ -8,10 +9,7 @@ interface TrustBarProps {
 
 const TrustBar: React.FC<TrustBarProps> = ({ trustLevel, satisfactionLevel }) => {
   const getTrustLabel = () => {
-    if (trustLevel < 30) return '陌生人';
-    if (trustLevel < 50) return '认识';
-    if (trustLevel < 70) return '信任';
-    return '非常信任';
+    return getRelationshipStage(trustLevel).label;
   };
 
   const getSatisfactionLabel = () => {

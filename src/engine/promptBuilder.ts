@@ -1,4 +1,5 @@
 import type { Character, ConflictState, Skill } from '../types/index';
+import { getMilestonePromptHints, getRelationshipStage } from './relationshipMilestones';
 
 const wealthLabel: Record<string, string> = {
   poor: '贫困家庭',
@@ -82,6 +83,8 @@ export const buildSystemPrompt = (
         : trustLevel < 70
           ? '用户相当信任我，我会分享更多'
           : '用户非常信任我，我会说出真心话';
+  const relationshipStage = getRelationshipStage(trustLevel);
+  const milestoneHints = getMilestonePromptHints(trustLevel, character);
 
   const { familyBackground: fb, socialTendency: st } = character;
 
@@ -133,8 +136,11 @@ ${memorySection}
 
 ## 当前状态
 - 信任度：${trustLevel}%（${trustLevelDescription}）
+- 关系阶段：${relationshipStage.label}
+- 阶段表现：${relationshipStage.promptHint}
 - 当前情绪：${emotionDescMap[currentEmotion]}
 - 和用户的关系：${character.name}对用户的态度取决于信任度和沟通质量
+${milestoneHints.length > 0 ? `\n## 已发生的关系变化\n${milestoneHints.join('\n')}` : ''}
 
 ## 已向用户透露的信息（你可以自然地讨论这些）
 ${unlockedSkillsText}
@@ -186,9 +192,11 @@ ${hiddenSkillsWarning}
 {"messages": ["第一句话", "第二句话"], "satisfactionDelta": 3}
 
 规则：
-- messages 是数组，每个元素是一句独立的短句（10-20字）
-- 最多2个元素，最少1个
-- 每句话不能有句号结尾，不能包含多个分句
+- messages 是数组，每个元素是一句独立的短句（8-24字）
+- 最多3个元素，最少1个；宁可拆成多条短气泡，也不要写成长段
+- 每个元素只能表达一个意思，不能包含多个分句
+- 如果一句话里出现“。！？；”，必须拆成不同的数组元素
+- 每句话不能有句号结尾
 - satisfactionDelta 见上方说明
 
 例子：
