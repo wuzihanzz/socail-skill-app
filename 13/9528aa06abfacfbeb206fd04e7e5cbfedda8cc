@@ -1,0 +1,47 @@
+src/types/index.ts
+  s_c1698f495389c1::t_26d30a4211072e 92
+src/pages/Chat.tsx
+  s_c1698f495389c1::t_3a181b86123479 21,353-366
+  s_c1698f495389c1::t_4f3c7fb9e01772 389-452
+  s_c1698f495389c1::t_4723eac9f23d2b 613-635,640,662-664,666-667
+  s_c1698f495389c1::t_44b4e0b5a9afde 157-158,160,185-190
+  s_c1698f495389c1::t_7a038d6048e48e 28-58
+  s_c1698f495389c1::t_82a3028ab0811d 11,26,121-136,272-276
+  s_c1698f495389c1::t_1a6edc7b5d52e9 202-205,661,665
+  s_c1698f495389c1::t_3188d2b9bfc6d3 156
+src/engine/memoryEngine.ts
+  s_c1698f495389c1::t_3994bb667a5aa7 318-324,327
+src/engine/conversationHelper.ts
+  s_c1698f495389c1::t_0b3c9056302fad 202
+  s_c1698f495389c1::t_aa7e567665f7dd 95-136,175-177,188-201,208,234-235,240-245
+src/pages/Profile.tsx
+  s_c1698f495389c1::t_8485656c8de774 8-23,30,65,113-130,220-287
+src/engine/promptBuilder.ts
+  s_c1698f495389c1::t_05e21cb7d396e0 114,125
+  s_c1698f495389c1::t_bc0ecf548653ea 88-94,128,131,151
+src/engine/relationshipMilestones.ts
+  s_c1698f495389c1::t_cd34183bf25338 17,130,138,150,160,168,180,190,198,210,265-271
+  s_c1698f495389c1::t_9016f30a1a64b2 146,176,206
+src/store/gameStore.ts
+  s_c1698f495389c1::t_c4dbba2ee56d2c 20,142-151,320,382,407-408
+src/engine/trustEngine.ts
+  s_c1698f495389c1::t_0388d00f878ae4 14-23,88-97,124,219-222,263-268
+  s_c1698f495389c1::t_3e05b8fbe152d8 31,45-46,155,158-167,172,176,181-190
+  s_c1698f495389c1::t_49d1912eec8238 32-44,156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.10-trip",
+  "base_commit_sha": "139528aa06abfacfbeb206fd04e7e5cbfedda8cc",
+  "prompts": {},
+  "sessions": {
+    "s_c1698f495389c1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e7284-1dd2-7c31-9486-5f29eefb382b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Zihan Wu （吴梓涵） <zihanwu@trip.com>"
+    }
+  }
+}
