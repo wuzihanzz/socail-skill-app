@@ -315,9 +315,16 @@ const buildDiaryEntry = (
   }
 
   const direction = input.trustDelta > 0 ? '更亲近' : input.trustDelta < 0 ? '更疏远' : '关系有变化';
+  const firstPersonContent =
+    input.trustDelta < 0
+      ? `今天和你有点不愉快。你说了${quote(input.userMessage)}，我当时确实有些受伤，也记住了这次边界被碰到的感觉。`
+      : looksLikeRepair(input.userMessage)
+        ? `今天你尝试修复我们之间的关系。你说${quote(input.userMessage)}，我能感觉到你在换一种方式靠近我。`
+        : `今天和你聊完以后，我觉得我们${direction}了一点。你说${quote(input.userMessage)}，这句话让我留下了印象。`;
+
   return {
     id: `diary_${now}`,
-    content: `${input.characterName}和用户的一次互动让关系${direction}。用户说${quote(input.userMessage)}`,
+    content: firstPersonContent,
     createdAt: now,
     trustLevel: input.trustLevel,
     emotion: input.emotion,

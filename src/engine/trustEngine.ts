@@ -11,6 +11,16 @@ const clampTrustDelta = (value: number): number => Math.max(-6, Math.min(6, valu
 
 const hasAny = (text: string, keywords: string[]): boolean => keywords.some((word) => text.includes(word));
 
+const isNegatedNear = (text: string, keyword: string): boolean => {
+  const index = text.indexOf(keyword);
+  if (index < 0) return false;
+  const before = text.slice(Math.max(0, index - 8), index);
+  return /(不是|并不是|没有|没觉得|不觉得|不算|并不)$/.test(before) || text.includes(`不是${keyword}`);
+};
+
+const hasUnnegatedAny = (text: string, keywords: string[]): boolean =>
+  keywords.some((word) => text.includes(word) && !isNegatedNear(text, word));
+
 const strongInsults = ['滚', '垃圾', '白痴', '废物', '恶心', '傻逼', '去死'];
 const mildInsults = ['傻', '蠢', '烦人', '无聊', '讨厌', '没用'];
 const dismissiveWords = ['无所谓', '随便', '不在乎', '关我什么事', '懒得', '别烦', '算了', '不想聊', '先这样'];
@@ -18,8 +28,22 @@ const nonsenseWords = ['哈哈哈', '啊啊啊', 'asdf', '？？？', '。。。
 const empathyWords = ['我理解', '我能理解', '我能感受', '你的感受', '听起来', '确实不容易'];
 const curiosityWords = ['能具体', '告诉我', '为什么', '发生了什么', '愿意说', '可以说说'];
 const apologyWords = ['对不起', '抱歉', '不好意思', '我错了', '我刚才', '我不是故意'];
-const repairWords = ['让你不舒服', '我说得太急', '我不该', '我收回', '下次我会', '我想重新说'];
-const reflectiveRepairWords = ['用了很差的方式', '不知道怎么接', '重新来一次', '重新说', '我想重来'];
+const repairWords = ['让你不舒服', '不舒服', '我说得太急', '我说得太冲', '我不该', '我收回', '下次我会', '我想重新说'];
+const accountabilityWords = [
+  '影响',
+  '冒犯',
+  '伤到',
+  '让你难受',
+  '让你不舒服',
+  '很不舒服',
+  '说得太冲',
+  '说得太急',
+  '我不该',
+  '我刚才那样说',
+  '我会换个问法',
+];
+const reflectiveRepairWords = ['用了很差的方式', '不知道怎么接', '重新来一次', '重新说', '我想重来', '换个问法'];
+const perfunctoryApologyWords = ['行了吧', '好了吧', '别生气了', '我都道歉了'];
 const encouragementWords = ['加油', '你可以', '相信你', '辛苦了', '已经做得很好'];
 const sharedExperienceWords = ['我也', '我曾经', '我经历过', '我以前'];
 const selfDisclosureWords = [
@@ -61,6 +85,16 @@ const emotionalDisclosureWords = [
   '委屈',
   '烦',
 ];
+const boundaryRespectWords = [
+  '太私人',
+  '可以先不说',
+  '不想说也没关系',
+  '不用立刻回答',
+  '你可以直接提醒我',
+  '我会换个问法',
+  '不是想劝你',
+  '不用证明自己',
+];
 
 /**
  * Calculate a bounded trust delta and conflict state from the user's message.
@@ -87,7 +121,7 @@ export const calculateTrustDelta = (
   }
 
   if (
-    hasAny(lowerMessage, mildInsults) ||
+    hasUnnegatedAny(lowerMessage, mildInsults) ||
     (lowerMessage.includes('你') && hasAny(lowerMessage, ['太差', '真烦', '很烦', '没意思', '有病']))
   ) {
     return {
@@ -118,22 +152,42 @@ export const calculateTrustDelta = (
 
   const isApology = hasAny(lowerMessage, apologyWords);
   const isRepair = isApology && hasAny(lowerMessage, repairWords);
+  const isAccountableRepair = isApology && (hasAny(lowerMessage, accountabilityWords) || hasAny(lowerMessage, reflectiveRepairWords));
+  const isPerfunctoryApology = hasAny(lowerMessage, perfunctoryApologyWords) && (isApology || lowerMessage.includes('道歉'));
 
-  if (isRepair) {
+  if (isPerfunctoryApology) {
+    return {
+      trustDelta: 0,
+      emotionChange: 'neutral',
+      conflictState: 'repairing',
+      conflictSummary: '用户在道歉，但语气敷衍，修复效果很有限',
+    };
+  }
+
+  if (isAccountableRepair) {
     return {
       trustDelta: 4,
       emotionChange: 'happy',
       conflictState: 'repairing',
-      conflictSummary: '用户在承认影响并尝试修复关系',
+      conflictSummary: '用户承认具体影响，并尝试用更好的方式重新连接',
+    };
+  }
+
+  if (isRepair) {
+    return {
+      trustDelta: 2,
+      emotionChange: 'neutral',
+      conflictState: 'repairing',
+      conflictSummary: '用户在尝试修复关系，但还需要更具体地承认影响',
     };
   }
 
   if (isApology) {
     return {
-      trustDelta: 2,
+      trustDelta: 1,
       emotionChange: 'neutral',
       conflictState: 'repairing',
-      conflictSummary: '用户开始道歉，但修复还需要继续',
+      conflictSummary: '用户开始道歉，但修复还比较浅',
     };
   }
 
@@ -159,6 +213,10 @@ export const calculateTrustDelta = (
   }
 
   if (hasAny(lowerMessage, sharedExperienceWords)) {
+    return { trustDelta: 2, emotionChange: 'happy', conflictState: 'none' };
+  }
+
+  if (hasAny(lowerMessage, boundaryRespectWords)) {
     return { trustDelta: 2, emotionChange: 'happy', conflictState: 'none' };
   }
 
@@ -200,6 +258,14 @@ export const mapSatisfactionToTrustDelta = (satisfactionDelta: number): number =
 
 export const combineTrustDeltas = (ruleDelta: number, llmDelta: number): number => {
   return Math.round(clampTrustDelta(ruleDelta * 0.75 + llmDelta * 0.25));
+};
+
+export const applyPositiveTrustMomentum = (
+  delta: number,
+  consecutivePositiveTurns: number
+): number => {
+  if (delta <= 0 || consecutivePositiveTurns < 1) return delta;
+  return Number(clampTrustDelta(delta * 1.3).toFixed(1));
 };
 
 /**

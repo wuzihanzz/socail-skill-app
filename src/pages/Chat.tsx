@@ -8,6 +8,7 @@ import { buildSystemPrompt } from '../engine/promptBuilder';
 import { getUnlockedSkills, getHiddenSkills } from '../engine/skillEngine';
 import { generateTodayEvent } from '../engine/eventGenerator';
 import {
+  applyPositiveTrustMomentum,
   calculateTrustDelta,
   combineTrustDeltas,
   isHarmfulMessage,
@@ -17,10 +18,44 @@ import { sendMessage } from '../engine/claudeClient';
 import { generateConversationTips, type ConversationTip } from '../engine/conversationHelper';
 import { buildMemoryContext, updateMemoryFromTurn } from '../engine/memoryEngine';
 import {
+  createMilestoneEventMessage,
   createMilestoneNotice,
   getCrossedTrustMilestones,
   getRelationshipStage,
 } from '../engine/relationshipMilestones';
+import type { Message } from '../types/index';
+
+type SpeechRecognitionEventResult = {
+  isFinal: boolean;
+  0: { transcript: string };
+};
+
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: SpeechRecognitionEventResult[];
+};
+
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+const getSpeechRecognitionConstructor = (): SpeechRecognitionConstructor | null => {
+  if (typeof window === 'undefined') return null;
+  const speechWindow = window as Window & {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null;
+};
 
 const splitLongAssistantPart = (part: string): string[] => {
   const maxLength = 34;
@@ -83,6 +118,22 @@ const splitAssistantMessages = (value: unknown): string[] => {
   return normalizeAssistantChunks(chunks);
 };
 
+const getConsecutivePositiveTrustTurns = (messages: Message[]): number => {
+  let count = 0;
+
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role !== 'assistant' || message.trustDelta === undefined) continue;
+    if (message.trustDelta > 0) {
+      count += 1;
+      continue;
+    }
+    break;
+  }
+
+  return count;
+};
+
 const Chat: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -102,7 +153,11 @@ const Chat: React.FC = () => {
   const [todayEvent, setTodayEvent] = useState<string | null>(null);
   const [selectedTip, setSelectedTip] = useState<ConversationTip | null>(null);
   const [milestoneNotice, setMilestoneNotice] = useState<{ title: string; body: string } | null>(null);
+  const [speechSupported, setSpeechSupported] = useState(() => Boolean(getSpeechRecognitionConstructor()));
+  const [isListening, setIsListening] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   const character = currentCharacterId ? characters.find((c) => c.id === currentCharacterId) : null;
   const relationship = currentCharacterId ? relationships[currentCharacterId] : null;
@@ -127,6 +182,13 @@ const Chat: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [relationship, loading]);
 
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+    };
+  }, []);
+
   if (!currentCharacterId) {
     return <div className="bg-[#eef3ed] p-4 text-center text-sm text-[#66756b]">正在载入</div>;
   }
@@ -137,6 +199,10 @@ const Chat: React.FC = () => {
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    }
     const userMessage = input.trim();
     setInput('');
     setSelectedTip(null);
@@ -203,7 +269,11 @@ const Chat: React.FC = () => {
       if (chunks.length === 0) chunks = [aiResponse];
 
       const mappedLLMDelta = mapSatisfactionToTrustDelta(satisfactionDelta);
-      const finalTrustDelta = combineTrustDeltas(trustAnalysis.trustDelta, mappedLLMDelta);
+      const baseTrustDelta = combineTrustDeltas(trustAnalysis.trustDelta, mappedLLMDelta);
+      const finalTrustDelta = applyPositiveTrustMomentum(
+        baseTrustDelta,
+        getConsecutivePositiveTrustTurns(relationship.conversationHistory)
+      );
       const projectedTrustLevel = Math.max(0, Math.min(100, relationship.trustLevel + finalTrustDelta));
       const crossedMilestones = getCrossedTrustMilestones(
         relationship.trustLevel,
@@ -280,6 +350,20 @@ const Chat: React.FC = () => {
             crossedMilestones.map((milestone) => milestone.threshold)
           );
           setMilestoneNotice(createMilestoneNotice(character, crossedMilestones[crossedMilestones.length - 1]));
+          const milestoneEvent = [...crossedMilestones]
+            .reverse()
+            .map((milestone) => createMilestoneEventMessage(character, milestone))
+            .find((message): message is string => Boolean(message));
+          if (milestoneEvent) {
+            window.setTimeout(() => {
+              addMessage(currentCharacterId, {
+                role: 'assistant',
+                content: milestoneEvent,
+                timestamp: Date.now(),
+                trustDelta: 0,
+              });
+            }, 500);
+          }
         }
         setSelectedTip(null);
         setLoading(false);
@@ -299,6 +383,70 @@ const Chat: React.FC = () => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleToggleSpeech = () => {
+    if (!speechSupported || loading) return;
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = getSpeechRecognitionConstructor();
+    if (!SpeechRecognition) {
+      setSpeechSupported(false);
+      setSpeechError('当前浏览器暂不支持语音输入');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+
+    let baseInput = input.trim();
+
+    recognition.onresult = (event) => {
+      let interimText = '';
+      let finalText = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalText += result[0].transcript;
+        } else {
+          interimText += result[0].transcript;
+        }
+      }
+
+      const nextSpeechText = `${finalText}${interimText}`.trim();
+      if (!nextSpeechText) return;
+      setInput([baseInput, nextSpeechText].filter(Boolean).join(baseInput ? ' ' : ''));
+      if (finalText.trim()) baseInput = [baseInput, finalText.trim()].filter(Boolean).join(baseInput ? ' ' : '');
+    };
+
+    recognition.onerror = (event) => {
+      setIsListening(false);
+      setSpeechError(event.error === 'not-allowed' ? '需要允许麦克风权限才能语音输入' : '语音输入暂时不可用');
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = recognition;
+    setSpeechError(null);
+    setIsListening(true);
+
+    try {
+      recognition.start();
+    } catch {
+      setIsListening(false);
+      setSpeechError('语音输入启动失败，可以稍后再试');
     }
   };
 
@@ -462,11 +610,34 @@ const Chat: React.FC = () => {
         )}
 
         <div className="flex items-end gap-2">
+          {speechSupported && (
+            <button
+              onClick={handleToggleSpeech}
+              disabled={loading}
+              className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[14px] border transition active:scale-95 disabled:opacity-50 ${
+                isListening
+                  ? 'border-[#4f735f] bg-[#dce9df] text-[#1f3128] shadow-[0_0_0_4px_rgba(79,115,95,0.12)]'
+                  : 'border-[#d9e4dc] bg-white text-[#66756b] hover:border-[#4f735f] hover:text-[#1f3128]'
+              }`}
+              aria-label={isListening ? '停止语音输入' : '开始语音输入'}
+              title={isListening ? '停止语音输入' : '语音输入'}
+            >
+              {isListening ? (
+                <span className="h-3 w-3 rounded-full bg-[#4f735f]" />
+              ) : (
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                  <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <path d="M12 19v3" />
+                </svg>
+              )}
+            </button>
+          )}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKey}
-            placeholder={`对 ${character.nickname} 说点什么`}
+            placeholder={isListening ? '正在听你说话...' : `对 ${character.nickname} 说点什么`}
             disabled={loading}
             rows={2}
             className="max-h-28 min-h-11 flex-1 resize-none rounded-[14px] border border-[#d9e4dc] bg-white px-3 py-2.5 text-sm leading-5 text-[#1f3128] placeholder-[#8b968f] transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#4f735f] disabled:opacity-50"
@@ -487,6 +658,13 @@ const Chat: React.FC = () => {
             )}
           </button>
         </div>
+        {(isListening || speechError) && (
+          <p className="mt-2 text-xs font-semibold text-[#66756b]">
+            {isListening
+              ? '正在听你说话，识别后会先放进输入框。'
+              : speechError}
+          </p>
+        )}
       </div>
     </div>
   );

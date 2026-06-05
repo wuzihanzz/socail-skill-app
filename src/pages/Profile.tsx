@@ -5,12 +5,29 @@ import { useGameStore } from '../store/gameStore';
 import PixelAvatar from '../components/PixelAvatar';
 import { getUnlockedSkills } from '../engine/skillEngine';
 import { getRelationshipStage } from '../engine/relationshipMilestones';
+import type { MemoryDiaryEntry } from '../types/index';
+
+const formatMemoryDate = (timestamp: number): string =>
+  new Intl.DateTimeFormat('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(timestamp));
+
+const toFirstPersonMemory = (entry: MemoryDiaryEntry, nickname: string): string =>
+  entry.content
+    .replaceAll(`${nickname}和用户的一次互动让关系`, '今天和你聊完以后，我感觉我们的关系')
+    .replaceAll('用户说', '你说')
+    .replaceAll('更亲近', '更近')
+    .replaceAll('更疏远', '远了一点');
 
 const Profile: React.FC = () => {
   const navigate = useNavigate();
   const { currentCharacterId, relationships, updateUserNotes } = useGameStore();
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState('');
+  const [memoryModalStep, setMemoryModalStep] = useState<'confirm' | 'timeline' | null>(null);
 
   if (!currentCharacterId) {
     return (
@@ -45,6 +62,7 @@ const Profile: React.FC = () => {
     (sum, room) => sum + room.drawers.length,
     0
   );
+  const timelineEntries = relationship.memoryWing?.diary ?? [];
 
   const infoRows = [
     { label: '年龄', unlocked: askedAbout.age, value: String(character.age) },
@@ -92,17 +110,24 @@ const Profile: React.FC = () => {
         </section>
 
         <section className="grid grid-cols-3 gap-2">
-          {[
-            ['信任', `${trustLevel.toFixed(0)}%`, trustLabel],
-            ['记忆', `${memoryCount}`, '片段'],
-            ['了解', `${unlockedSkills.length}/${character.skills.length}`, '特质'],
-          ].map(([label, value, hint]) => (
-            <div key={label} className="rounded-[18px] bg-white px-3 py-3 shadow-sm">
-              <p className="text-xs font-bold text-[#66756b]">{label}</p>
-              <p className="mt-1 text-base font-black">{value}</p>
-              <p className="mt-0.5 text-xs font-semibold text-[#8b968f]">{hint}</p>
-            </div>
-          ))}
+          <div className="rounded-[18px] bg-white px-3 py-3 shadow-sm">
+            <p className="text-xs font-bold text-[#66756b]">信任</p>
+            <p className="mt-1 text-base font-black">{trustLevel.toFixed(0)}%</p>
+            <p className="mt-0.5 text-xs font-semibold text-[#8b968f]">{trustLabel}</p>
+          </div>
+          <button
+            onClick={() => setMemoryModalStep('confirm')}
+            className="rounded-[18px] bg-white px-3 py-3 text-left shadow-sm transition hover:bg-[#fbfdf8] active:scale-[0.99]"
+          >
+            <p className="text-xs font-bold text-[#66756b]">记忆</p>
+            <p className="mt-1 text-base font-black">{memoryCount}</p>
+            <p className="mt-0.5 text-xs font-semibold text-[#8b968f]">片段</p>
+          </button>
+          <div className="rounded-[18px] bg-white px-3 py-3 shadow-sm">
+            <p className="text-xs font-bold text-[#66756b]">了解</p>
+            <p className="mt-1 text-base font-black">{unlockedSkills.length}/{character.skills.length}</p>
+            <p className="mt-0.5 text-xs font-semibold text-[#8b968f]">特质</p>
+          </div>
         </section>
 
         <section className="rounded-[22px] bg-white p-4 shadow-sm">
@@ -192,6 +217,74 @@ const Profile: React.FC = () => {
           )}
         </section>
       </main>
+
+      {memoryModalStep && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#1f3128]/35 px-4 pb-4 pt-12 backdrop-blur-sm sm:items-center">
+          <div className="w-full max-w-md rounded-[24px] bg-white p-4 shadow-[0_24px_70px_rgba(31,49,40,0.22)]">
+            {memoryModalStep === 'confirm' ? (
+              <>
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-[#6f8b76]">关系记忆</p>
+                <h3 className="mt-2 text-xl font-black text-[#1f3128]">
+                  确定查看{character.nickname}对你的印象吗？
+                </h3>
+                <p className="mt-2 text-sm font-semibold leading-6 text-[#66756b]">
+                  这里会用{character.nickname}的第一人称记录你们之间留下的互动痕迹。
+                </p>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => setMemoryModalStep(null)}
+                    className="flex-1 rounded-[14px] bg-[#eef3ed] px-4 py-2 text-sm font-black text-[#66756b] transition active:scale-95"
+                  >
+                    先不看
+                  </button>
+                  <button
+                    onClick={() => setMemoryModalStep('timeline')}
+                    className="flex-1 rounded-[14px] bg-[#1f3128] px-4 py-2 text-sm font-black text-white transition active:scale-95"
+                  >
+                    查看印象
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.12em] text-[#6f8b76]">timeline</p>
+                    <h3 className="mt-1 text-xl font-black text-[#1f3128]">{character.nickname}对你的印象</h3>
+                  </div>
+                  <button
+                    onClick={() => setMemoryModalStep(null)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d9e4dc] text-[#66756b]"
+                    aria-label="关闭"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {timelineEntries.length > 0 ? (
+                  <div className="max-h-[52vh] space-y-3 overflow-y-auto pr-1">
+                    {timelineEntries.map((entry) => (
+                      <div key={entry.id} className="border-l-2 border-[#dce9df] pl-3">
+                        <p className="text-[11px] font-black text-[#8b968f]">{formatMemoryDate(entry.createdAt)}</p>
+                        <p className="mt-1 text-sm font-semibold leading-6 text-[#1f3128]">
+                          {toFirstPersonMemory(entry, character.nickname)}
+                        </p>
+                        <p className="mt-1 text-xs font-bold text-[#6f8b76]">信任 {entry.trustLevel.toFixed(0)}%</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-[18px] bg-[#fbfdf8] px-4 py-6 text-center">
+                    <p className="text-sm font-semibold text-[#66756b]">
+                      还没有形成清晰的关系印象。多聊几次后，这里会慢慢长出时间线。
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

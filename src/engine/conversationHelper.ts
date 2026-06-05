@@ -92,6 +92,48 @@ const tipLibrary: Record<string, ConversationTip> = {
     guidance: ['承认刚才可能让对方不舒服', '不要急着为自己辩解', '给对方一点空间'],
     example: '我刚才那样说可能有点急了，如果让你不舒服，我想先道个歉。',
   },
+  specificRepair: {
+    id: 'specific-repair',
+    label: '具体修复',
+    title: '别只说对不起，要说清楚你理解到的影响',
+    guidance: ['点出刚才哪句话伤人', '承认影响而不是解释动机', '给对方一点恢复空间'],
+    example: '我刚才把话说得太重了，可能让你觉得被否定了。这个影响我应该承认。',
+  },
+  restartSoftly: {
+    id: 'restart-softly',
+    label: '重开一句',
+    title: '把同一个意思换成更容易被接住的说法',
+    guidance: ['保留真正想问的部分', '去掉评价和催促', '用“我想了解”开头会柔和很多'],
+    example: '我想重新问一次：我其实是想了解你最近的状态，不是想评价你。',
+  },
+  respectBoundary: {
+    id: 'respect-boundary',
+    label: '留点空间',
+    title: '给对方选择权，关系会更容易松动',
+    guidance: ['承认这个问题可能有点近', '允许对方先不回答', '表达你愿意换个问法'],
+    example: '如果这个问题太私人，可以先不说。你也可以提醒我，我会换个问法。',
+  },
+  deepenTopic: {
+    id: 'deepen-topic',
+    label: '深入一点',
+    title: '顺着对方刚透露的线索往下走',
+    guidance: ['抓住一个关键词继续', '问感受而不只问信息', '不要一次问太多问题'],
+    example: '你刚才说“撑不住”的时候，我有点在意。那通常会发生在什么时刻？',
+  },
+  reflectMeaning: {
+    id: 'reflect-meaning',
+    label: '确认理解',
+    title: '先确认你听懂了，再继续追问',
+    guidance: ['复述你听到的核心感受', '用“我理解得对吗”降低压力', '让对方有修正你的空间'],
+    example: '我理解的是，你不是不想努力，而是已经累到不知道怎么停下来。是这样吗？',
+  },
+  gentleInvite: {
+    id: 'gentle-invite',
+    label: '轻轻邀请',
+    title: '高信任时，可以表达你还想继续连接',
+    guidance: ['表达你还愿意继续聊', '同时尊重对方边界', '不要把对方拉回来得太用力'],
+    example: '我还挺想继续听你说的，但如果你现在想停一下，我也可以等你。',
+  },
 };
 
 const pickTips = (ids: string[]): ConversationTip[] => {
@@ -130,6 +172,9 @@ export const generateConversationTips = (
   const personalKeywords = ['我', '我的', '我觉得', '我想', '我经历'];
   const conflictKeywords = ['不舒服', '算了', '别说了', '有点过', '冒犯', '伤人', '不想聊', '改天再说'];
   const apologyKeywords = ['抱歉', '对不起', '不好意思', '我刚才', '我不是故意', '我收回'];
+  const depthKeywords = ['其实', '有时候', '一直', '压力', '累', '害怕', '不确定', '不知道', '撑不住', '负罪感'];
+  const boundaryKeywords = ['不想说', '先不说', '太私人', '不方便', '不想聊', '以后再说'];
+  const repairUserKeywords = ['对不起', '抱歉', '不好意思', '我错了', '说得太冲', '让你不舒服', '换个问法'];
 
   const tips: string[] = [];
 
@@ -140,14 +185,27 @@ export const generateConversationTips = (
     hasAny(userLower, apologyKeywords);
 
   if (looksTense) {
-    tips.push('repair');
-    tips.push('empathize');
-    tips.push('askContext');
+    if (hasAny(userLower, repairUserKeywords) || context.conflictState === 'repairing') {
+      tips.push('specificRepair');
+      tips.push('restartSoftly');
+      tips.push('respectBoundary');
+    } else {
+      tips.push('repair');
+      tips.push('specificRepair');
+      tips.push('respectBoundary');
+    }
+  }
+
+  if (hasAny(lower, boundaryKeywords)) {
+    tips.push('respectBoundary');
+    tips.push('restartSoftly');
+    tips.push('gentleInvite');
   }
 
   // Sad/stressed situation
   if (hasAny(lower, sadKeywords)) {
     tips.push('empathize');
+    tips.push('reflectMeaning');
     tips.push('askContext');
     tips.push('encourage');
   }
@@ -173,8 +231,16 @@ export const generateConversationTips = (
   // Personal stories
   if (hasAny(lower, personalKeywords)) {
     if ((context.trustLevel ?? 25) >= 35 && !looksTense) tips.push('share');
+    if (hasAny(lower, depthKeywords)) tips.push('deepenTopic');
+    tips.push('reflectMeaning');
     tips.push('empathize');
     tips.push('askContext');
+  }
+
+  if (hasAny(lower, depthKeywords) && !looksTense) {
+    tips.push('deepenTopic');
+    tips.push('reflectMeaning');
+    if ((context.trustLevel ?? 25) >= 55) tips.push('gentleInvite');
   }
 
   // Default tips if none match

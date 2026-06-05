@@ -89,6 +89,7 @@ export interface RelationshipState {
   conflictState: ConflictState;
   lastConflictSummary?: string;
   repairAttempts: number;
+  conflictTurns: number;
   achievedMilestones: number[];
   unlockedSkills: string[]; // skill IDs
   conversationHistory: Message[];

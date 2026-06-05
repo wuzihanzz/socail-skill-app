@@ -17,6 +17,7 @@ const initializeRelationships = (): Record<string, RelationshipState> => {
       currentEmotion: 'neutral',
       conflictState: 'none',
       repairAttempts: 0,
+      conflictTurns: 0,
       achievedMilestones: [10, 20],
       unlockedSkills: char.skills
         .filter((s) => s.alwaysVisible)
@@ -138,8 +139,16 @@ export const useGameStore = create<Store>((set) => ({
 
         if (conflictState) {
           relationship.conflictState = deriveConflictState(relationship, conflictState, delta);
-          relationship.repairAttempts =
-            conflictState === 'repairing' ? relationship.repairAttempts + 1 : 0;
+
+          if (delta < 0 && conflictState !== 'none' && conflictState !== 'repairing') {
+            relationship.conflictTurns += 1;
+            relationship.repairAttempts = 0;
+          } else if (conflictState === 'repairing' && relationship.conflictState !== 'none') {
+            relationship.repairAttempts += 1;
+          } else if (relationship.conflictState === 'none') {
+            relationship.conflictTurns = 0;
+            relationship.repairAttempts = 0;
+          }
 
           if (conflictSummary) {
             relationship.lastConflictSummary = conflictSummary;
@@ -308,6 +317,7 @@ export const useGameStore = create<Store>((set) => ({
           currentEmotion: 'neutral',
           conflictState: 'none',
           repairAttempts: 0,
+          conflictTurns: 0,
           achievedMilestones: [10, 20],
           unlockedSkills: character.skills
             .filter((s) => s.alwaysVisible)
@@ -369,6 +379,7 @@ const normalizeStoredState = (state: GameState): GameState => {
           conflictState: relationship.conflictState ?? defaults[character.id].conflictState,
           lastConflictSummary: relationship.lastConflictSummary,
           repairAttempts: relationship.repairAttempts ?? 0,
+          conflictTurns: relationship.conflictTurns ?? 0,
           achievedMilestones:
             relationship.achievedMilestones ??
             defaults[character.id].achievedMilestones,
@@ -393,7 +404,8 @@ const deriveConflictState = (
   if (nextConflictState !== 'repairing') return nextConflictState;
 
   if (relationship.conflictState === 'none') return 'none';
-  if (relationship.repairAttempts >= 1 && delta > 1) return 'none';
+  const requiredRepairTurns = relationship.conflictTurns >= 2 ? 2 : 1;
+  if (relationship.repairAttempts >= requiredRepairTurns && delta > 1) return 'none';
   return 'repairing';
 };
 
