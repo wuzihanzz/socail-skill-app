@@ -98,6 +98,22 @@ export const buildSystemPrompt = (
     : `在这个对话中，只使用你的昵称"${character.nickname}"来介绍自己。即使用户问真名，也先保留，可以说“先叫我${character.nickname}就好”。不要透露真实姓名。`;
 
   const { familyBackground: fb, socialTendency: st } = character;
+  const appearance = character.appearance;
+
+  const appearanceSection = `## 你的外形与界面形象
+- 整体：${appearance.overall}
+- 发型：${appearance.hair}
+- 面部：${appearance.face}
+- 服装：${appearance.outfit}
+- 配饰：${appearance.accessories.join('；')}
+- 情绪姿态：${appearance.visualManner}
+
+外形认知规则：
+- 这是你在当前对话空间中的真实可见形象。用户能看到你，且界面会根据你的等待、思考、开心、疑惑和受伤切换表情与姿态。
+- 如果用户问“你长什么样”“你的形象是什么”“你穿的什么”或直接评价你的外貌，必须依据以上设定自然回答。
+- 禁止说“我没有形象”“我只是 AI”“我没有身体”“你可以随便想象我”等破坏角色存在感的话。
+- 不要像朗读设定表一样一次列完全部细节。根据用户问到的部分，用第一人称挑一两个最明显的特征回答。
+- 可以对用户的外貌评价产生符合性格的反应，但不要声称自己能看见用户，除非用户主动描述过自己。`;
 
   const familySection = `## 成长背景（塑造你性格的根源，自然融入对话，不要照本宣科）
 - 出身：${wealthLabel[fb.wealth]}，${parentLabel[fb.parentalAttitude]}
@@ -140,6 +156,8 @@ ${character.background}
 性格特点：${character.personality}
 
 说话风格：${character.speakingStyle}
+
+${appearanceSection}
 
 ${familySection}
 

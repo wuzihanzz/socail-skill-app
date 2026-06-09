@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import characters from '../data/characters';
 import { useGameStore } from '../store/gameStore';
-import PixelAvatar from '../components/PixelAvatar';
+import PixelAvatar, { type CharacterVisualState } from '../components/PixelAvatar';
 import ChatBubble from '../components/ChatBubble';
 import { buildSystemPrompt } from '../engine/promptBuilder';
 import { getUnlockedSkills, getHiddenSkills } from '../engine/skillEngine';
@@ -25,6 +25,27 @@ import {
   getRelationshipStage,
 } from '../engine/relationshipMilestones';
 import type { Message, UserProfile } from '../types/index';
+
+const getFeedbackVisualState = (trustDelta: number): CharacterVisualState => {
+  if (trustDelta >= 4) return 'delighted';
+  if (trustDelta > 0) return 'happy';
+  if (trustDelta <= -4) return 'upset';
+  if (trustDelta < 0) return 'puzzled';
+  return 'neutral';
+};
+
+const getVisualStatus = (state: CharacterVisualState): string => {
+  const labels: Record<CharacterVisualState, string> = {
+    idle: '在等你开口',
+    neutral: '认真听着',
+    thinking: '正在想怎么回应',
+    happy: '被你说得有点开心',
+    delighted: '好像真的被你说动了',
+    puzzled: '有点没听懂你的意思',
+    upset: '需要一点时间消化',
+  };
+  return labels[state];
+};
 
 type SpeechRecognitionEventResult = {
   isFinal: boolean;
@@ -209,6 +230,7 @@ const Chat: React.FC = () => {
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [visualState, setVisualState] = useState<CharacterVisualState>('idle');
   const [todayEvent, setTodayEvent] = useState<string | null>(null);
   const [selectedTip, setSelectedTip] = useState<ConversationTip | null>(null);
   const [milestoneNotice, setMilestoneNotice] = useState<{ title: string; body: string } | null>(null);
@@ -217,6 +239,7 @@ const Chat: React.FC = () => {
   const [speechError, setSpeechError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const visualTimerRef = useRef<number | null>(null);
 
   const character = currentCharacterId ? characters.find((c) => c.id === currentCharacterId) : null;
   const relationship = currentCharacterId ? relationships[currentCharacterId] : null;
@@ -289,8 +312,18 @@ const Chat: React.FC = () => {
     return () => {
       recognitionRef.current?.stop();
       recognitionRef.current = null;
+      if (visualTimerRef.current) window.clearTimeout(visualTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (visualTimerRef.current) {
+      window.clearTimeout(visualTimerRef.current);
+      visualTimerRef.current = null;
+    }
+    const timer = window.setTimeout(() => setVisualState('idle'), 0);
+    return () => window.clearTimeout(timer);
+  }, [currentCharacterId]);
 
   if (!currentCharacterId) {
     return <div className="bg-[#eef3ed] p-4 text-center text-sm text-[#66756b]">正在载入</div>;
@@ -316,6 +349,7 @@ const Chat: React.FC = () => {
     if (!relationship.firstMessageSent) setFirstMessageSent(currentCharacterId, true);
 
     if (isHarmfulMessage(userMessage)) {
+      setVisualState('upset');
       addMessage(currentCharacterId, {
         role: 'assistant',
         content: '我需要一点时间。也许我们改天再聊',
@@ -351,6 +385,7 @@ const Chat: React.FC = () => {
       promptConflictSummary
     );
 
+    setVisualState('thinking');
     setLoading(true);
 
     try {
@@ -410,6 +445,8 @@ const Chat: React.FC = () => {
                   ? 'repairing'
                   : relationship.conflictState
                 : 'none';
+      const feedbackVisualState = getFeedbackVisualState(finalTrustDelta);
+      setVisualState(feedbackVisualState);
 
       updateMemoryWing(currentCharacterId, (latestRelationship) =>
         updateMemoryFromTurn(latestRelationship.memoryWing, {
@@ -449,6 +486,17 @@ const Chat: React.FC = () => {
       });
 
       const totalDelay = chunks.length > 1 ? (chunks.length - 1) * 300 + 100 : 100;
+      if (visualTimerRef.current) window.clearTimeout(visualTimerRef.current);
+      visualTimerRef.current = window.setTimeout(() => {
+        visualTimerRef.current = null;
+        setVisualState(
+          finalEmotion === 'happy'
+            ? 'happy'
+            : finalEmotion === 'upset'
+              ? 'upset'
+              : 'neutral'
+        );
+      }, totalDelay + 2400);
       setTimeout(() => {
         updateTrustLevel(
           currentCharacterId,
@@ -483,6 +531,7 @@ const Chat: React.FC = () => {
       }, totalDelay);
     } catch (err) {
       console.error(err);
+      setVisualState('puzzled');
       addMessage(currentCharacterId, {
         role: 'assistant',
         content: '抱歉，我遇到了一些问题。可以再试一次吗',
@@ -588,12 +637,27 @@ const Chat: React.FC = () => {
             返回
           </button>
 
-          <div className="h-10 w-8 flex-shrink-0 overflow-hidden rounded-[8px] bg-white">
-            <PixelAvatar characterId={character.id} emotion={relationship.currentEmotion} name={character.name} />
+          <div className="relative h-16 w-14 flex-shrink-0 overflow-visible rounded-[14px] bg-[#eef3ed]">
+            <PixelAvatar
+              characterId={character.id}
+              emotion={relationship.currentEmotion}
+              state={visualState}
+              name={character.name}
+            />
+            {visualState === 'thinking' && (
+              <span className="absolute -right-1 top-1 flex gap-0.5" aria-hidden="true">
+                <span className="h-1 w-1 animate-pulse rounded-full bg-[#4f735f]" />
+                <span className="h-1 w-1 animate-pulse rounded-full bg-[#4f735f] [animation-delay:180ms]" />
+                <span className="h-1 w-1 animate-pulse rounded-full bg-[#4f735f] [animation-delay:360ms]" />
+              </span>
+            )}
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-black text-[#1f3128]">{character.nickname}</div>
+            <div className="mt-0.5 truncate text-[10px] font-bold text-[#4f735f]">
+              {getVisualStatus(visualState)}
+            </div>
             <div className="mt-0.5 flex items-center gap-2 text-xs text-[#66756b]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#4f735f]" />
               <span className="whitespace-nowrap">{trustLabel}</span>
@@ -626,8 +690,13 @@ const Chat: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-4 py-5">
         {!hasMessages && (
           <div className="mx-auto mt-10 flex max-w-xs flex-col items-center text-center">
-            <div className="mb-4 h-24 w-20 overflow-hidden rounded-[18px] bg-white shadow-sm">
-              <PixelAvatar characterId={character.id} emotion="neutral" name={character.name} />
+            <div className="mb-4 h-32 w-24 overflow-visible rounded-[18px] bg-white/70 shadow-sm">
+              <PixelAvatar
+                characterId={character.id}
+                emotion="neutral"
+                state={visualState}
+                name={character.name}
+              />
             </div>
             <p className="mb-1 text-sm font-black text-[#1f3128]">{character.nickname}</p>
             <p className="text-xs font-semibold leading-5 text-[#66756b]">

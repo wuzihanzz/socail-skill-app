@@ -50,6 +50,15 @@ export interface SocialTendency {
   drinkingHabit: 'never' | 'rarely' | 'socially' | 'regularly';
 }
 
+export interface CharacterAppearance {
+  overall: string;
+  hair: string;
+  face: string;
+  outfit: string;
+  accessories: string[];
+  visualManner: string;
+}
+
 // Character Definition
 export interface Character {
   id: string;
@@ -65,6 +74,7 @@ export interface Character {
   background: string;
   personality: string;
   speakingStyle: string;
+  appearance: CharacterAppearance;
   familyBackground: FamilyBackground;
   venuePreferences: VenuePreferences;
   socialTendency: SocialTendency;
