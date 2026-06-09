@@ -1,0 +1,48 @@
+src/pages/Home.tsx
+  s_c1698f495389c1::t_a3a12b092dd927 160
+  s_c1698f495389c1::t_4cbef7f89d5b36 118-124
+  s_c1698f495389c1::t_3c6c13badec064 155
+src/components/PixelAvatar.tsx
+  s_c1698f495389c1::t_2689a157d4879c 67
+  s_c1698f495389c1::t_3c6c13badec064 52-57
+  s_c1698f495389c1::t_a3a12b092dd927 9,47,51,60-66,68-71
+src/pages/Profile.tsx
+  s_c1698f495389c1::t_3c6c13badec064 96,101
+  s_c1698f495389c1::t_a3a12b092dd927 97-100,102
+src/types/index.ts
+  s_c1698f495389c1::t_fa64a77760b6b5 171,178
+src/store/gameStore.ts
+  s_c1698f495389c1::t_fa64a77760b6b5 27,70,106,146-167,481
+src/pages/Characters.tsx
+  s_c1698f495389c1::t_3c6c13badec064 54-55,60,114
+  s_c1698f495389c1::t_a3a12b092dd927 119
+src/components/PixelAvatar.css
+  s_c1698f495389c1::t_a3a12b092dd927 5-12,21-27,35-62,109-110,114-115,119-120,124-126,130-131,135-136,140
+  s_c1698f495389c1::t_3c6c13badec064 28-32,63-71,74-75,78-79,82-84,87-89,92-94,97-99,102-105
+src/pages/Chat.tsx
+  s_c1698f495389c1::t_3c6c13badec064 640,694,700
+  s_c1698f495389c1::t_a3a12b092dd927 646
+src/pages/Login.tsx
+  s_c1698f495389c1::t_fa64a77760b6b5 1-99
+src/App.tsx
+  s_c1698f495389c1::t_d608cb10f68387 67-70
+  s_c1698f495389c1::t_fa64a77760b6b5 7,18,23-30,43,71-82
+src/pages/UserProfile.tsx
+  s_c1698f495389c1::t_d608cb10f68387 20,46-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.10-trip",
+  "base_commit_sha": "de4e230f92035a646e6b78b8324b26bd468dd44f",
+  "prompts": {},
+  "sessions": {
+    "s_c1698f495389c1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e7284-1dd2-7c31-9486-5f29eefb382b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Zihan Wu （吴梓涵） <zihanwu@trip.com>"
+    }
+  }
+}
