@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 import { getProfileFactLabel } from '../engine/userProfileEngine';
 import type { ProfileFact, ProfileFactType } from '../types/index';
@@ -16,9 +16,11 @@ const factTypes: Array<{ type: ProfileFactType; label: string }> = [
 
 const UserProfile: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     session,
     userProfile,
+    logout,
     upsertUserProfileFact,
     deleteUserProfileFact,
     confirmUserProfileFact,
@@ -28,6 +30,13 @@ const UserProfile: React.FC = () => {
   const [editingFact, setEditingFact] = useState<ProfileFact | null>(null);
 
   const facts = userProfile?.facts ?? [];
+  const returnTo =
+    typeof location.state === 'object' &&
+    location.state !== null &&
+    'returnTo' in location.state &&
+    location.state.returnTo === '/chat'
+      ? '/chat'
+      : '/';
 
   const handleSubmit = () => {
     if (!value.trim()) return;
@@ -43,13 +52,18 @@ const UserProfile: React.FC = () => {
     setValue(fact.value);
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
   if (session?.mode === 'guest') {
     return (
       <div className="min-h-screen bg-[#eef3ed] text-[#1f3128]">
         <header className="border-b border-[#d9e4dc] bg-[#fbfdf8]/90 backdrop-blur">
           <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4 sm:px-6">
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate(returnTo)}
               className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold"
             >
               返回
@@ -86,7 +100,7 @@ const UserProfile: React.FC = () => {
       <header className="border-b border-[#d9e4dc] bg-[#fbfdf8]/90 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4 sm:px-6">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate(returnTo)}
             className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold"
           >
             返回
@@ -95,10 +109,24 @@ const UserProfile: React.FC = () => {
             <h1 className="font-black">我的画像</h1>
             <p className="text-xs font-semibold text-[#66756b]">你可以校正 AI 对你的理解</p>
           </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="ml-auto rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-xs font-black text-[#66756b]"
+          >
+            退出
+          </button>
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl space-y-4 px-4 py-5 sm:px-6">
+        <section className="flex items-center justify-between rounded-[18px] bg-[#dce9df] px-4 py-3">
+          <div>
+            <p className="text-xs font-black text-[#4f735f]">关系记忆已开启</p>
+            <p className="mt-1 text-xs font-semibold text-[#66756b]">当前浏览器会持续保存画像和关系进度</p>
+          </div>
+          <span className="h-2.5 w-2.5 rounded-full bg-[#4f735f]" />
+        </section>
         <section className="rounded-[24px] bg-white p-4 shadow-sm">
           <h2 className="text-sm font-black">新增或修改</h2>
           <div className="mt-3 grid gap-2 sm:grid-cols-[180px_1fr]">

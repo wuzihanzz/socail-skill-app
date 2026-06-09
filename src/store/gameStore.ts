@@ -19,12 +19,17 @@ import {
   upsertManualProfileFact,
 } from '../engine/userProfileEngine';
 import { bootstrapAnonymousSession, saveCloudState } from '../lib/accountApi';
+import { GUEST_SESSION_KEY, PERSISTENT_ENTRY_KEY } from '../lib/sessionKeys';
 
 const LEGACY_STORAGE_KEY = 'social-skill-game-state';
 const ACTIVE_SESSION_KEY = 'social-skill-active-session';
 const ACCOUNT_STATE_PREFIX = 'social-skill-account-state:';
 const LOCAL_CACHE_KEY = 'social-skill-cloud-cache';
-const GUEST_SESSION_KEY = 'social-skill-guest-session';
+
+const hasStoredEntryChoice = (): boolean =>
+  typeof window !== 'undefined' &&
+  (localStorage.getItem(PERSISTENT_ENTRY_KEY) === 'true' ||
+    Boolean(sessionStorage.getItem(GUEST_SESSION_KEY)));
 
 // Initialize relationships for all characters
 const initializeRelationships = (): Record<string, RelationshipState> => {
@@ -68,6 +73,7 @@ interface Store extends GameState {
   storageMode: 'postgres' | 'memory' | null;
   initializeSession: () => Promise<void>;
   enterGuestMode: () => void;
+  logout: () => void;
   setCurrentCharacter: (characterId: string) => void;
   addMessage: (characterId: string, message: Message) => void;
   updateTrustLevel: (
@@ -103,7 +109,7 @@ export const useGameStore = create<Store>((set) => ({
   currentCharacterId: null,
   relationships: initializeRelationships(),
   conversationHistory: [],
-  isHydrating: false,
+  isHydrating: hasStoredEntryChoice(),
   hydrationError: null,
   storageMode: null,
 
@@ -132,6 +138,7 @@ export const useGameStore = create<Store>((set) => ({
         hydrationError: null,
         storageMode: response.storage,
       });
+      localStorage.setItem(PERSISTENT_ENTRY_KEY, 'true');
       saveToStorage(initialState);
       clearLegacySessionKeys();
     } catch (error) {
@@ -155,6 +162,25 @@ export const useGameStore = create<Store>((set) => ({
       sessionStorage.setItem(GUEST_SESSION_KEY, JSON.stringify(session));
       return {
         session,
+        userProfile: null,
+        currentCharacterId: null,
+        relationships: initializeRelationships(),
+        conversationHistory: [],
+        isHydrating: false,
+        hydrationError: null,
+        storageMode: null,
+      };
+    }),
+
+  logout: () =>
+    set(() => {
+      localStorage.removeItem(PERSISTENT_ENTRY_KEY);
+      sessionStorage.removeItem(GUEST_SESSION_KEY);
+      if (saveTimer) window.clearTimeout(saveTimer);
+      saveTimer = undefined;
+      pendingState = null;
+      return {
+        session: null,
         userProfile: null,
         currentCharacterId: null,
         relationships: initializeRelationships(),
@@ -574,7 +600,7 @@ const loadLegacyState = (session: UserSession): GameState | null => {
 
 const clearLegacySessionKeys = (): void => {
   localStorage.removeItem(ACTIVE_SESSION_KEY);
-  sessionStorage.removeItem('social-skill-guest-session');
+  sessionStorage.removeItem(GUEST_SESSION_KEY);
 };
 
 const toGameState = (state: GameState): GameState => ({

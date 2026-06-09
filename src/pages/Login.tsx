@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 
-export const PERSISTENT_ENTRY_KEY = 'social-skill-persistent-entry';
-
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const initializeSession = useGameStore((state) => state.initializeSession);
@@ -17,7 +15,6 @@ const Login: React.FC = () => {
     await initializeSession();
     const session = useGameStore.getState().session;
     if (session?.mode === 'account') {
-      localStorage.setItem(PERSISTENT_ENTRY_KEY, 'true');
       navigate('/', { replace: true });
     }
     setLoading(false);

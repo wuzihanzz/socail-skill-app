@@ -7,6 +7,7 @@ import ChatBubble from '../components/ChatBubble';
 import { buildSystemPrompt } from '../engine/promptBuilder';
 import { getUnlockedSkills, getHiddenSkills } from '../engine/skillEngine';
 import { generateTodayEvent } from '../engine/eventGenerator';
+import { sanitizeAssistantMessage } from '../engine/assistantOutput';
 import {
   applyPositiveTrustMomentum,
   calculateTrustDelta,
@@ -112,7 +113,7 @@ const normalizeAssistantChunks = (chunks: string[]): string[] => {
   const result: string[] = [];
 
   chunks.forEach((chunk) => {
-    const cleaned = chunk.replace(/[。！？!?]$/, '').trim();
+    const cleaned = sanitizeAssistantMessage(chunk.replace(/[。！？!?]$/, '').trim());
     if (!cleaned) return;
 
     const previous = result[result.length - 1];
@@ -414,7 +415,10 @@ const Chat: React.FC = () => {
       } catch {
         chunks = splitAssistantMessages(aiResponse);
       }
-      if (chunks.length === 0) chunks = [aiResponse];
+      if (chunks.length === 0) {
+        const fallback = sanitizeAssistantMessage(aiResponse);
+        chunks = fallback ? [fallback] : ['我刚才有点走神了，你再说一遍'];
+      }
 
       const mappedLLMDelta = mapSatisfactionToTrustDelta(satisfactionDelta);
       const baseTrustDelta = combineTrustDeltas(trustAnalysis.trustDelta, mappedLLMDelta);
@@ -673,7 +677,7 @@ const Chat: React.FC = () => {
           </div>
 
           <button
-            onClick={() => navigate('/me')}
+            onClick={() => navigate('/me', { state: { returnTo: '/chat' } })}
             className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95"
           >
             画像

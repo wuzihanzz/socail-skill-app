@@ -1,4 +1,5 @@
 import React from 'react';
+import { sanitizeAssistantMessage } from '../engine/assistantOutput';
 
 interface ChatBubbleProps {
   role: 'user' | 'assistant';
@@ -8,6 +9,8 @@ interface ChatBubbleProps {
 
 const ChatBubble: React.FC<ChatBubbleProps> = ({ role, content, characterName }) => {
   const isUser = role === 'user';
+  const visibleContent = isUser ? content : sanitizeAssistantMessage(content);
+  if (!visibleContent) return null;
 
   return (
     <div className={`mb-3 flex ${isUser ? 'justify-end' : 'justify-start'} animate-[fadeUp_0.2s_ease-out]`}>
@@ -23,7 +26,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({ role, content, characterName })
             {characterName}
           </div>
         )}
-        {content}
+        {visibleContent}
       </div>
     </div>
   );

@@ -61,7 +61,7 @@ const Home: React.FC = () => {
             <span className="text-sm font-black" style={{ color: theme.ink }}>关系练习室</span>
           </div>
           <button
-            onClick={() => navigate('/me')}
+            onClick={() => navigate('/me', { state: { returnTo: '/' } })}
             className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-black"
             style={{ color: theme.ink }}
           >

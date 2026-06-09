@@ -4,9 +4,10 @@ import Home from './pages/Home';
 import Characters from './pages/Characters';
 import Chat from './pages/Chat';
 import Profile from './pages/Profile';
-import Login, { PERSISTENT_ENTRY_KEY } from './pages/Login';
+import Login from './pages/Login';
 import UserProfile from './pages/UserProfile';
 import { useGameStore } from './store/gameStore';
+import { GUEST_SESSION_KEY, PERSISTENT_ENTRY_KEY } from './lib/sessionKeys';
 import './App.css';
 
 function App() {
@@ -20,7 +21,7 @@ function App() {
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-    if (sessionStorage.getItem('social-skill-guest-session')) {
+    if (sessionStorage.getItem(GUEST_SESSION_KEY)) {
       enterGuestMode();
       return;
     }
