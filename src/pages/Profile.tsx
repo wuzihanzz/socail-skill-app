@@ -3,8 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import characters from '../data/characters';
 import { useGameStore } from '../store/gameStore';
 import PixelAvatar from '../components/PixelAvatar';
-import { getUnlockedSkills } from '../engine/skillEngine';
-import { getRelationshipStage } from '../engine/relationshipMilestones';
+import {
+  getMilestoneRevealedSkills,
+  getNextSkillRevealMilestone,
+  getRelationshipStage,
+} from '../engine/relationshipMilestones';
 import type { MemoryDiaryEntry } from '../types/index';
 
 const formatMemoryDate = (timestamp: number): string =>
@@ -55,14 +58,12 @@ const Profile: React.FC = () => {
   }
 
   const askedAbout = relationship.askedAbout ?? { name: false, age: false, job: false, mbti: false, zodiac: false };
-  const unlockedSkills = getUnlockedSkills(character, relationship.trustLevel, relationship.unlockedSkills);
   const trustLevel = relationship.trustLevel;
   const trustLabel = getRelationshipStage(trustLevel).label;
-  const memoryCount = Object.values(relationship.memoryWing?.rooms ?? {}).reduce(
-    (sum, room) => sum + room.drawers.length,
-    0
-  );
   const timelineEntries = relationship.memoryWing?.diary ?? [];
+  const memoryCount = timelineEntries.length;
+  const revealedSkills = getMilestoneRevealedSkills(character, relationship.achievedMilestones);
+  const nextSkillRevealMilestone = getNextSkillRevealMilestone(character, relationship.achievedMilestones);
 
   const infoRows = [
     { label: '年龄', unlocked: askedAbout.age, value: String(character.age) },
@@ -125,7 +126,7 @@ const Profile: React.FC = () => {
           </button>
           <div className="rounded-[18px] bg-white px-3 py-3 shadow-sm">
             <p className="text-xs font-bold text-[#66756b]">了解</p>
-            <p className="mt-1 text-base font-black">{unlockedSkills.length}/{character.skills.length}</p>
+            <p className="mt-1 text-base font-black">{revealedSkills.length}/{character.skills.length}</p>
             <p className="mt-0.5 text-xs font-semibold text-[#8b968f]">特质</p>
           </div>
         </section>
@@ -159,17 +160,22 @@ const Profile: React.FC = () => {
 
         <section className="rounded-[22px] bg-white p-4 shadow-sm">
           <h3 className="mb-3 text-sm font-black">已了解的特质</h3>
-          {unlockedSkills.length > 0 ? (
+          {revealedSkills.length > 0 ? (
             <div className="space-y-2">
-              {unlockedSkills.map((skill) => (
+              {revealedSkills.map((skill) => (
                 <div key={skill.id} className="rounded-[16px] bg-[#fbfdf8] p-3">
                   <div className="mb-0.5 text-sm font-black">{skill.name}</div>
                   <div className="text-xs font-semibold leading-5 text-[#66756b]">{skill.description}</div>
                 </div>
               ))}
+              {nextSkillRevealMilestone && (
+                <p className="px-1 pt-1 text-xs font-bold text-[#8b968f]">
+                  到 {nextSkillRevealMilestone}% 的关系节点，会再了解一点这个人。
+                </p>
+              )}
             </div>
           ) : (
-            <p className="text-sm italic text-[#8b968f]">还没有了解这个人的特点</p>
+            <p className="text-sm italic text-[#8b968f]">他还在观察你。关系推进后，会慢慢透露自己的特质。</p>
           )}
         </section>
 
@@ -276,7 +282,7 @@ const Profile: React.FC = () => {
                 ) : (
                   <div className="rounded-[18px] bg-[#fbfdf8] px-4 py-6 text-center">
                     <p className="text-sm font-semibold text-[#66756b]">
-                      还没有形成清晰的关系印象。多聊几次后，这里会慢慢长出时间线。
+                      他对你还在探索阶段，试着多聊两句吧。
                     </p>
                   </div>
                 )}

@@ -17,13 +17,14 @@ import {
 import { sendMessage } from '../engine/claudeClient';
 import { generateConversationTips, type ConversationTip } from '../engine/conversationHelper';
 import { buildMemoryContext, updateMemoryFromTurn } from '../engine/memoryEngine';
+import { buildUserProfileSummary } from '../engine/userProfileEngine';
 import {
   createMilestoneEventMessage,
   createMilestoneNotice,
   getCrossedTrustMilestones,
   getRelationshipStage,
 } from '../engine/relationshipMilestones';
-import type { Message } from '../types/index';
+import type { Message, UserProfile } from '../types/index';
 
 type SpeechRecognitionEventResult = {
   isFinal: boolean;
@@ -134,10 +135,67 @@ const getConsecutivePositiveTrustTurns = (messages: Message[]): number => {
   return count;
 };
 
+const getPreferredUserAddress = (
+  profile: UserProfile | null,
+  fallbackName?: string
+): string | null => {
+  const preferredAddress = profile?.facts.find((fact) => fact.type === 'preferredAddress')?.value;
+  const displayName = profile?.facts.find((fact) => fact.type === 'displayName')?.value;
+  const value = preferredAddress || displayName || fallbackName;
+  if (!value || value === '练习者' || value === '游客') return null;
+  return value;
+};
+
+const getShareableProfileHint = (profile: UserProfile | null): string | null => {
+  const fact = profile?.facts
+    .filter((item) =>
+      ['hobby', 'occupationOrStudy', 'communicationPreference'].includes(item.type)
+    )
+    .sort((a, b) => {
+      const confirmedDelta = Number(b.userConfirmed) - Number(a.userConfirmed);
+      if (confirmedDelta !== 0) return confirmedDelta;
+      return b.confidence - a.confidence || b.updatedAt - a.updatedAt;
+    })[0];
+
+  if (!fact) return null;
+  if (fact.type === 'hobby') return `听说你喜欢${fact.value}`;
+  if (fact.type === 'occupationOrStudy') return `听说你最近在做${fact.value}`;
+  if (fact.type === 'communicationPreference') return `听说你更习惯${fact.value}`;
+  return null;
+};
+
+const createCharacterIntroduction = (
+  characterId: string,
+  referrerNickname: string | null,
+  userAddress: string | null,
+  profileHint: string | null
+): string => {
+  const address = userAddress ? `，${userAddress}` : '';
+  const hint = profileHint ? `，${profileHint}` : '';
+
+  if (referrerNickname) {
+    const introductions: Record<string, string> = {
+      'chen-wei': `哦${address}，我听${referrerNickname}说起过你${hint}。先别期待太多，我们慢慢聊`,
+      'lin-xue': `原来是你${address}。我听${referrerNickname}提起过你${hint}，还挺想认识你的`,
+      'xiao-mei': `你好${address}。我听${referrerNickname}说起过你${hint}，不用紧张，慢慢聊就好`,
+    };
+    return introductions[characterId] ?? `你好${address}。我听${referrerNickname}说起过你`;
+  }
+
+  const introductions: Record<string, string> = {
+    'chen-wei': `你好${address}。先叫我熬夜的猫就好`,
+    'lin-xue': `你好呀${address}。先叫我彩色的梦想家吧`,
+    'xiao-mei': `你好${address}。先叫我温暖的小天使就好`,
+  };
+  return introductions[characterId] ?? `你好${address}`;
+};
+
 const Chat: React.FC = () => {
   const navigate = useNavigate();
   const {
     currentCharacterId,
+    session,
+    userProfile,
     relationships,
     addMessage,
     updateTrustLevel,
@@ -146,6 +204,7 @@ const Chat: React.FC = () => {
     markAskedAbout,
     markTrustMilestones,
     updateMemoryWing,
+    extractUserProfileFromMessage,
   } = useGameStore();
 
   const [input, setInput] = useState('');
@@ -161,6 +220,50 @@ const Chat: React.FC = () => {
 
   const character = currentCharacterId ? characters.find((c) => c.id === currentCharacterId) : null;
   const relationship = currentCharacterId ? relationships[currentCharacterId] : null;
+
+  useEffect(() => {
+    if (
+      !character ||
+      !relationship ||
+      !currentCharacterId ||
+      session?.mode !== 'account' ||
+      relationship.conversationHistory.length > 0
+    ) {
+      return;
+    }
+
+    const referrer = characters
+      .filter((candidate) => candidate.id !== currentCharacterId)
+      .map((candidate) => ({
+        character: candidate,
+        lastMessage:
+          relationships[candidate.id]?.conversationHistory[
+            relationships[candidate.id].conversationHistory.length - 1
+          ],
+      }))
+      .filter((item) => item.lastMessage)
+      .sort((a, b) => (b.lastMessage?.timestamp ?? 0) - (a.lastMessage?.timestamp ?? 0))[0];
+
+    addMessage(currentCharacterId, {
+      role: 'assistant',
+      content: createCharacterIntroduction(
+        character.id,
+        referrer?.character.nickname ?? null,
+        getPreferredUserAddress(userProfile, session.displayName),
+        getShareableProfileHint(userProfile)
+      ),
+      timestamp: Date.now(),
+      trustDelta: 0,
+    });
+  }, [
+    addMessage,
+    character,
+    currentCharacterId,
+    relationship,
+    relationships,
+    session,
+    userProfile,
+  ]);
 
   useEffect(() => {
     if (!character || !relationship || !currentCharacterId) return;
@@ -209,6 +312,7 @@ const Chat: React.FC = () => {
     setMilestoneNotice(null);
 
     addMessage(currentCharacterId, { role: 'user', content: userMessage, timestamp: Date.now() });
+    extractUserProfileFromMessage(userMessage);
     if (!relationship.firstMessageSent) setFirstMessageSent(currentCharacterId, true);
 
     if (isHarmfulMessage(userMessage)) {
@@ -227,7 +331,12 @@ const Chat: React.FC = () => {
     const promptConflictSummary = trustAnalysis.conflictSummary ?? relationship.lastConflictSummary;
     const unlockedSkills = getUnlockedSkills(character, relationship.trustLevel, relationship.unlockedSkills);
     const hiddenSkills = getHiddenSkills(character, relationship.trustLevel, relationship.unlockedSkills);
-    const memoryContext = buildMemoryContext(relationship.memoryWing, userMessage, relationship.currentEmotion);
+    const memoryContext =
+      session?.mode === 'account'
+        ? buildMemoryContext(relationship.memoryWing, userMessage, relationship.currentEmotion, 6)
+        : '';
+    const userProfileSummary =
+      session?.mode === 'account' ? buildUserProfileSummary(userProfile, 10) : '';
     const systemPrompt = buildSystemPrompt(
       character,
       relationship.trustLevel + trustAnalysis.trustDelta,
@@ -236,6 +345,7 @@ const Chat: React.FC = () => {
       todayEvent,
       trustAnalysis.emotionChange,
       memoryContext,
+      userProfileSummary,
       promptConflictState,
       promptConflictSummary
     );
@@ -246,7 +356,9 @@ const Chat: React.FC = () => {
       const aiResponse = await sendMessage(
         systemPrompt,
         userMessage,
-        relationship.conversationHistory.map((m) => ({ role: m.role, content: m.content }))
+        relationship.conversationHistory
+          .slice(-12)
+          .map((m) => ({ role: m.role, content: m.content }))
       );
 
       let chunks: string[] = [];
@@ -298,18 +410,20 @@ const Chat: React.FC = () => {
                   : relationship.conflictState
                 : 'none';
 
-      updateMemoryWing(currentCharacterId, (latestRelationship) =>
-        updateMemoryFromTurn(latestRelationship.memoryWing, {
-          characterId: currentCharacterId,
-          characterName: character.nickname,
-          userMessage,
-          assistantMessages: chunks,
-          trustDelta: finalTrustDelta,
-          trustLevel: latestRelationship.trustLevel + finalTrustDelta,
-          emotion: finalEmotion,
-          todayEvent,
-        })
-      );
+      if (session?.mode === 'account') {
+        updateMemoryWing(currentCharacterId, (latestRelationship) =>
+          updateMemoryFromTurn(latestRelationship.memoryWing, {
+            characterId: currentCharacterId,
+            characterName: character.nickname,
+            userMessage,
+            assistantMessages: chunks,
+            trustDelta: finalTrustDelta,
+            trustLevel: latestRelationship.trustLevel + finalTrustDelta,
+            emotion: finalEmotion,
+            todayEvent,
+          })
+        );
+      }
 
       const fullText = chunks.join(' ').toLowerCase();
       const zodiacName = character.zodiac
@@ -493,6 +607,13 @@ const Chat: React.FC = () => {
               <span className="whitespace-nowrap">{trustLevel.toFixed(0)}%</span>
             </div>
           </div>
+
+          <button
+            onClick={() => navigate('/me')}
+            className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95"
+          >
+            {session?.mode === 'guest' ? '游客' : '画像'}
+          </button>
 
           <button
             onClick={() => navigate('/profile')}

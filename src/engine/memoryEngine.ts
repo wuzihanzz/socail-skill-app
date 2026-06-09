@@ -288,6 +288,7 @@ const createDrawer = ({
 }): MemoryDrawer => ({
   id: `mem_${now}_${Math.random().toString(36).slice(2, 8)}`,
   content,
+  embeddingText: content,
   speaker,
   source: 'conversation',
   importance,

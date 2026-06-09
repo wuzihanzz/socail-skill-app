@@ -137,6 +137,8 @@ export interface MemoryRoom {
 export interface MemoryDrawer {
   id: string;
   content: string;
+  embeddingText?: string;
+  embedding?: number[];
   speaker?: 'user' | 'assistant';
   source: 'conversation' | 'system' | 'manual';
   importance: 1 | 2 | 3 | 4 | 5;
@@ -154,6 +156,42 @@ export interface MemoryDiaryEntry {
   createdAt: number;
   trustLevel: number;
   emotion: 'neutral' | 'happy' | 'upset';
+}
+
+export type UserSessionMode = 'account' | 'guest';
+
+export interface UserSession {
+  mode: UserSessionMode;
+  userId: string;
+  displayName: string;
+  email?: string;
+  authProvider?: 'supabase' | 'local';
+  createdAt: number;
+}
+
+export type ProfileFactType =
+  | 'displayName'
+  | 'gender'
+  | 'preferredAddress'
+  | 'hobby'
+  | 'occupationOrStudy'
+  | 'communicationPreference'
+  | 'sensitiveBoundary';
+
+export interface ProfileFact {
+  id: string;
+  type: ProfileFactType;
+  value: string;
+  confidence: number;
+  source: 'conversation' | 'manual';
+  userConfirmed: boolean;
+  updatedAt: number;
+}
+
+export interface UserProfile {
+  userId: string;
+  facts: ProfileFact[];
+  updatedAt: number;
 }
 
 // Message
@@ -176,6 +214,8 @@ export interface Tip {
 
 // Game State
 export interface GameState {
+  session: UserSession | null;
+  userProfile: UserProfile | null;
   currentCharacterId: string | null;
   relationships: Record<string, RelationshipState>;
   conversationHistory: Message[];

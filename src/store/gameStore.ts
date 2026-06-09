@@ -1,9 +1,30 @@
 import { create } from 'zustand';
-import type { ConflictState, GameState, RelationshipState, Message } from '../types/index';
+import type {
+  ConflictState,
+  GameState,
+  Message,
+  ProfileFactType,
+  RelationshipState,
+  UserProfile,
+  UserSession,
+} from '../types/index';
 import characters from '../data/characters';
 import { createMemoryWing, normalizeMemoryWing } from '../engine/memoryEngine';
+import {
+  confirmProfileFact,
+  createUserProfile,
+  deleteProfileFact,
+  extractProfileFactsFromMessage,
+  mergeProfileFacts,
+  upsertManualProfileFact,
+} from '../engine/userProfileEngine';
 
-const STORAGE_KEY = 'social-skill-game-state';
+const LEGACY_STORAGE_KEY = 'social-skill-game-state';
+const ACTIVE_SESSION_KEY = 'social-skill-active-session';
+const GUEST_SESSION_KEY = 'social-skill-guest-session';
+const ACCOUNT_STATE_PREFIX = 'social-skill-account-state:';
+
+const getAccountStateKey = (userId: string): string => `${ACCOUNT_STATE_PREFIX}${userId}`;
 
 // Initialize relationships for all characters
 const initializeRelationships = (): Record<string, RelationshipState> => {
@@ -42,6 +63,9 @@ const initializeRelationships = (): Record<string, RelationshipState> => {
 };
 
 interface Store extends GameState {
+  loginWithAuthenticatedUser: (userId: string, email: string, displayName?: string) => void;
+  enterGuestMode: () => void;
+  logout: () => void;
   setCurrentCharacter: (characterId: string) => void;
   addMessage: (characterId: string, message: Message) => void;
   updateTrustLevel: (
@@ -60,6 +84,10 @@ interface Store extends GameState {
     characterId: string,
     updater: (relationship: RelationshipState) => RelationshipState['memoryWing']
   ) => void;
+  extractUserProfileFromMessage: (userMessage: string) => void;
+  upsertUserProfileFact: (type: ProfileFactType, value: string, existingId?: string) => void;
+  deleteUserProfileFact: (factId: string) => void;
+  confirmUserProfileFact: (factId: string) => void;
   markAskedAbout: (
     characterId: string,
     field: 'name' | 'age' | 'job' | 'mbti' | 'zodiac'
@@ -69,9 +97,71 @@ interface Store extends GameState {
 }
 
 export const useGameStore = create<Store>((set) => ({
+  session: null,
+  userProfile: null,
   currentCharacterId: null,
   relationships: initializeRelationships(),
   conversationHistory: [],
+
+  loginWithAuthenticatedUser: (userId: string, email: string, displayName?: string) =>
+    set(() => {
+      sessionStorage.removeItem(GUEST_SESSION_KEY);
+      const now = Date.now();
+      const cleanName = displayName?.trim() || email.split('@')[0] || '练习者';
+      const session: UserSession = {
+        mode: 'account',
+        userId,
+        displayName: cleanName,
+        email,
+        authProvider: 'supabase',
+        createdAt: now,
+      };
+      const existingState = loadAccountState(session);
+      if (existingState) {
+        localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(existingState.session));
+        return existingState;
+      }
+      const newState: GameState = {
+        session,
+        userProfile: createUserProfile(userId, cleanName),
+        currentCharacterId: null,
+        relationships: initializeRelationships(),
+        conversationHistory: [],
+      };
+      saveToStorage(newState);
+      return newState;
+    }),
+
+  enterGuestMode: () =>
+    set(() => {
+      const session: UserSession = {
+        mode: 'guest',
+        userId: `guest_${Date.now()}`,
+        displayName: '游客',
+        createdAt: Date.now(),
+      };
+      sessionStorage.setItem(GUEST_SESSION_KEY, JSON.stringify(session));
+      return {
+        session,
+        userProfile: null,
+        currentCharacterId: null,
+        relationships: initializeRelationships(),
+        conversationHistory: [],
+      };
+    }),
+
+  logout: () =>
+    set(() => {
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+      sessionStorage.removeItem(GUEST_SESSION_KEY);
+      return {
+        session: null,
+        userProfile: null,
+        currentCharacterId: null,
+        relationships: initializeRelationships(),
+        conversationHistory: [],
+      };
+    }),
 
   setCurrentCharacter: (characterId: string) =>
     set((state) => {
@@ -274,6 +364,52 @@ export const useGameStore = create<Store>((set) => ({
       return newState;
     }),
 
+  extractUserProfileFromMessage: (userMessage: string) =>
+    set((state) => {
+      if (state.session?.mode !== 'account' || !state.userProfile) return state;
+      const extractedFacts = extractProfileFactsFromMessage(state.session.userId, userMessage);
+      if (extractedFacts.length === 0) return state;
+      const newState = {
+        ...state,
+        userProfile: mergeProfileFacts(state.userProfile, extractedFacts),
+      };
+      saveToStorage(newState);
+      return newState;
+    }),
+
+  upsertUserProfileFact: (type: ProfileFactType, value: string, existingId?: string) =>
+    set((state) => {
+      if (state.session?.mode !== 'account' || !state.userProfile) return state;
+      const newState = {
+        ...state,
+        userProfile: upsertManualProfileFact(state.userProfile, type, value, existingId),
+      };
+      saveToStorage(newState);
+      return newState;
+    }),
+
+  deleteUserProfileFact: (factId: string) =>
+    set((state) => {
+      if (state.session?.mode !== 'account' || !state.userProfile) return state;
+      const newState = {
+        ...state,
+        userProfile: deleteProfileFact(state.userProfile, factId),
+      };
+      saveToStorage(newState);
+      return newState;
+    }),
+
+  confirmUserProfileFact: (factId: string) =>
+    set((state) => {
+      if (state.session?.mode !== 'account' || !state.userProfile) return state;
+      const newState = {
+        ...state,
+        userProfile: confirmProfileFact(state.userProfile, factId),
+      };
+      saveToStorage(newState);
+      return newState;
+    }),
+
   markAskedAbout: (
     characterId: string,
     field: 'name' | 'age' | 'job' | 'mbti' | 'zodiac'
@@ -293,10 +429,36 @@ export const useGameStore = create<Store>((set) => ({
     }),
 
   loadFromStorage: () => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
+    const activeSession = readStoredSession();
+    if (activeSession) {
+      const accountState = loadAccountState(activeSession);
+      if (accountState) {
+        set(accountState);
+        return;
+      }
+    }
+
+    const guestSession = readGuestSession();
+    if (guestSession) {
+      set({
+        session: guestSession,
+        userProfile: null,
+        currentCharacterId: null,
+        relationships: initializeRelationships(),
+        conversationHistory: [],
+      });
+      return;
+    }
+
+    const legacyStored = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacyStored) {
       try {
-        const state = normalizeStoredState(JSON.parse(stored));
+        const parsed = JSON.parse(legacyStored) as GameState;
+        const state = normalizeStoredState(parsed);
+        if (state.session?.mode === 'account') {
+          saveToStorage(state);
+          localStorage.removeItem(LEGACY_STORAGE_KEY);
+        }
         set(state);
       } catch (e) {
         console.error('Failed to load from storage:', e);
@@ -349,8 +511,10 @@ export const useGameStore = create<Store>((set) => ({
 
 // Helper function to save to localStorage
 const saveToStorage = (state: GameState) => {
+  if (state.session?.mode !== 'account') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(getAccountStateKey(state.session.userId), JSON.stringify(state));
+    localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(state.session));
   } catch (e) {
     console.error('Failed to save to storage:', e);
   }
@@ -388,11 +552,68 @@ const normalizeStoredState = (state: GameState): GameState => {
 
   return {
     ...state,
+    session: state.session ?? null,
+    userProfile: normalizeUserProfile(state.userProfile, state.session),
     relationships,
     conversationHistory:
       state.currentCharacterId && relationships[state.currentCharacterId]
         ? relationships[state.currentCharacterId].conversationHistory
         : state.conversationHistory ?? [],
+  };
+};
+
+const readGuestSession = (): UserSession | null => {
+  const stored = sessionStorage.getItem(GUEST_SESSION_KEY);
+  if (!stored) return null;
+  try {
+    const session = JSON.parse(stored) as UserSession;
+    return session.mode === 'guest' ? session : null;
+  } catch {
+    sessionStorage.removeItem(GUEST_SESSION_KEY);
+    return null;
+  }
+};
+
+const readStoredSession = (): UserSession | null => {
+  const stored = localStorage.getItem(ACTIVE_SESSION_KEY);
+  if (!stored) return null;
+  try {
+    const session = JSON.parse(stored) as UserSession;
+    return session.mode === 'account' && session.userId ? session : null;
+  } catch {
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+    return null;
+  }
+};
+
+const loadAccountState = (session: UserSession): GameState | null => {
+  const stored = localStorage.getItem(getAccountStateKey(session.userId));
+  if (!stored) return null;
+  try {
+    const state = normalizeStoredState(JSON.parse(stored) as GameState);
+    return {
+      ...state,
+      session: {
+        ...session,
+        createdAt: state.session?.createdAt ?? session.createdAt,
+      },
+    };
+  } catch (error) {
+    console.error('Failed to load account state:', error);
+    return null;
+  }
+};
+
+const normalizeUserProfile = (
+  profile: UserProfile | null | undefined,
+  session: UserSession | null | undefined
+): UserProfile | null => {
+  if (!session || session.mode !== 'account') return null;
+  return {
+    ...(profile ?? createUserProfile(session.userId, session.displayName)),
+    userId: session.userId,
+    facts: profile?.facts ?? createUserProfile(session.userId, session.displayName).facts,
+    updatedAt: profile?.updatedAt ?? Date.now(),
   };
 };
 

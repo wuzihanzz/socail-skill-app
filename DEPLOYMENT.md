@@ -100,3 +100,20 @@ npm run preview
 ---
 
 完成！🎉 你现在可以邀请朋友们使用了。
+# Supabase 邮箱验证码登录
+
+在 Supabase 创建项目后，将以下变量配置到本地 `.env.local` 和部署平台：
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+在 Supabase Dashboard 的 Authentication > Email Templates 中，将登录邮件改为包含验证码 token，例如：
+
+```html
+<h2>你的登录验证码</h2>
+<p>{{ .Token }}</p>
+```
+
+Authentication > URL Configuration 中需要加入线上域名和本地调试地址。`anon key` 可以放在浏览器环境变量中，但不要把 `service_role key` 放进前端。

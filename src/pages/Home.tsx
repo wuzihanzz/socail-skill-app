@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import characters from '../data/characters';
 import { useGameStore } from '../store/gameStore';
 import PixelAvatar from '../components/PixelAvatar';
+import { supabase } from '../lib/supabase';
 
 const theme = {
   bg: '#eef3ed',
@@ -17,7 +18,7 @@ const theme = {
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
-  const { relationships, currentCharacterId, setCurrentCharacter } = useGameStore();
+  const { relationships, currentCharacterId, setCurrentCharacter, session, logout } = useGameStore();
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(() => currentCharacterId);
 
   useEffect(() => {
@@ -48,6 +49,13 @@ const Home: React.FC = () => {
     navigate('/chat');
   };
 
+  const handleLogout = async () => {
+    if (session?.authProvider === 'supabase' && supabase) {
+      await supabase.auth.signOut();
+    }
+    logout();
+  };
+
   return (
     <div className="min-h-screen text-gray-950" style={{ backgroundColor: theme.bg }}>
       <main
@@ -63,6 +71,22 @@ const Home: React.FC = () => {
               *
             </span>
             <span className="text-sm font-black" style={{ color: theme.ink }}>关系练习室</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/me')}
+              className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-black"
+              style={{ color: theme.ink }}
+            >
+              {session?.mode === 'guest' ? '游客模式' : '我的画像'}
+            </button>
+            <button
+              onClick={() => void handleLogout()}
+              className="rounded-full px-3 py-1.5 text-xs font-black text-white"
+              style={{ backgroundColor: theme.ink }}
+            >
+              退出
+            </button>
           </div>
         </header>
 

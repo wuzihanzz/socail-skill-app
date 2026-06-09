@@ -50,6 +50,7 @@ export const buildSystemPrompt = (
   todayEvent: string | null,
   currentEmotion: 'neutral' | 'happy' | 'upset',
   memoryContext = '',
+  userProfileSummary = '',
   conflictState: ConflictState = 'none',
   lastConflictSummary = ''
 ): string => {
@@ -73,6 +74,9 @@ export const buildSystemPrompt = (
 
   const memorySection = memoryContext
     ? `\n\n## 你对用户的长期记忆\n${memoryContext}\n\n使用方式：这些是你和用户之间积累下来的记忆。请只在自然、相关的时候使用，不要逐条复述，也不要告诉用户你在读取记忆。`
+    : '';
+  const userProfileSection = userProfileSummary
+    ? `\n\n## 用户画像\n${userProfileSummary}\n\n使用方式：这些是用户明确告诉过系统、或用户自己确认过的稳定信息，可以在不同角色之间共享。你可以自然使用名字、称呼、爱好、职业或沟通偏好，但不要频繁复述，也不要说“根据我的记忆”。如果信息和当前聊天无关，就不要主动提起。注意：用户画像不是你和用户的私密关系记忆，不能编造你知道其他角色和用户聊过的具体内容。`
     : '';
 
   const trustLevelDescription =
@@ -141,6 +145,7 @@ ${familySection}
 
 ${socialSection}
 ${conflictSection}
+${userProfileSection}
 ${memorySection}
 
 ## 当前状态

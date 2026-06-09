@@ -1,4 +1,4 @@
-import type { Character } from '../types/index';
+import type { Character, Skill } from '../types/index';
 
 export type RelationshipStageId = 'stranger' | 'familiar' | 'closer' | 'trusted' | 'intimate';
 
@@ -269,4 +269,67 @@ export const createMilestoneEventMessage = (
 ): string | null => {
   const variant = getCharacterMilestoneVariant(character, milestone);
   return variant.eventMessage ?? null;
+};
+
+const skillRevealMilestones = [20, 40, 60, 80];
+
+const characterSkillRevealMap: Record<string, Record<number, string[]>> = {
+  'chen-wei': {
+    20: ['nickname'],
+    40: ['work-aholic'],
+    60: ['family-expectation'],
+    80: ['deep-insecurity'],
+  },
+  'lin-xue': {
+    20: ['nickname'],
+    40: ['creative-mind'],
+    60: ['relationship-anxiety'],
+    80: ['perfectionism-burden'],
+  },
+  'xiao-mei': {
+    20: ['nickname'],
+    40: ['caregiver'],
+    60: ['hidden-dreams'],
+    80: ['homesick-villager'],
+  },
+};
+
+export const getMilestoneRevealedSkills = (
+  character: Character,
+  achievedMilestones: number[] = []
+): Skill[] => {
+  const achieved = new Set(achievedMilestones);
+  const revealMap = characterSkillRevealMap[character.id];
+
+  if (!revealMap) {
+    const revealedCount = skillRevealMilestones.filter((threshold) => achieved.has(threshold)).length;
+    return character.skills.slice(0, Math.min(revealedCount, character.skills.length));
+  }
+
+  const revealedSkillIds = skillRevealMilestones.flatMap((threshold) =>
+    achieved.has(threshold) ? revealMap[threshold] ?? [] : []
+  );
+  const revealed = new Set(revealedSkillIds);
+  return character.skills.filter((skill) => revealed.has(skill.id));
+};
+
+export const getNextSkillRevealMilestone = (
+  character: Character,
+  achievedMilestones: number[] = []
+): number | null => {
+  const revealMap = characterSkillRevealMap[character.id];
+  if (!revealMap) {
+    const revealedCount = getMilestoneRevealedSkills(character, achievedMilestones).length;
+    if (revealedCount >= character.skills.length) return null;
+    return skillRevealMilestones.find((threshold) => !achievedMilestones.includes(threshold)) ?? null;
+  }
+
+  return (
+    skillRevealMilestones.find((threshold) => {
+      if (achievedMilestones.includes(threshold)) return false;
+      return (revealMap[threshold] ?? []).some((skillId) =>
+        character.skills.some((skill) => skill.id === skillId)
+      );
+    }) ?? null
+  );
 };
