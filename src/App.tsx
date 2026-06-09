@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Characters from './pages/Characters';
 import Chat from './pages/Chat';
 import Profile from './pages/Profile';
+import Login, { PERSISTENT_ENTRY_KEY } from './pages/Login';
 import UserProfile from './pages/UserProfile';
 import { useGameStore } from './store/gameStore';
 import './App.css';
@@ -14,12 +15,19 @@ function App() {
   const isHydrating = useGameStore((state) => state.isHydrating);
   const hydrationError = useGameStore((state) => state.hydrationError);
   const initializeSession = useGameStore((state) => state.initializeSession);
+  const enterGuestMode = useGameStore((state) => state.enterGuestMode);
 
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-    void initializeSession();
-  }, [initializeSession]);
+    if (sessionStorage.getItem('social-skill-guest-session')) {
+      enterGuestMode();
+      return;
+    }
+    if (localStorage.getItem(PERSISTENT_ENTRY_KEY) === 'true') {
+      void initializeSession();
+    }
+  }, [enterGuestMode, initializeSession]);
 
   if (isHydrating) {
     return (
@@ -32,7 +40,7 @@ function App() {
     );
   }
 
-  if (hydrationError || !session) {
+  if (hydrationError && localStorage.getItem(PERSISTENT_ENTRY_KEY) === 'true') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#eef3ed] px-5 text-[#1f3128]">
         <main className="w-full max-w-md rounded-[24px] bg-white p-6 text-center shadow-sm">
@@ -56,12 +64,22 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/characters" element={<Characters />} />
-        <Route path="/chat" element={<Chat />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/me" element={<UserProfile />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route
+          path="/login"
+          element={session?.mode === 'account' ? <Navigate to="/" replace /> : <Login />}
+        />
+        {session ? (
+          <>
+            <Route path="/" element={<Home />} />
+            <Route path="/characters" element={<Characters />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/me" element={<UserProfile />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </>
+        ) : (
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        )}
       </Routes>
     </Router>
   );

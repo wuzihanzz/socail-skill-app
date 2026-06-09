@@ -93,8 +93,13 @@ const Profile: React.FC = () => {
         <section className="rounded-[24px] bg-white p-4 shadow-sm">
           <div className="rounded-[20px] bg-[#dce9df] p-4">
             <div className="flex items-start gap-4">
-              <div className="h-24 w-20 flex-shrink-0 overflow-hidden rounded-[18px] bg-white">
-                <PixelAvatar characterId={character.id} emotion={relationship.currentEmotion} name={character.name} />
+              <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-[20px] bg-white">
+                <PixelAvatar
+                  characterId={character.id}
+                  emotion={relationship.currentEmotion}
+                  name={character.name}
+                  framing="face"
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-black uppercase text-[#4f735f]">selected relation</p>

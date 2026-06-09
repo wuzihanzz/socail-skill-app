@@ -24,6 +24,7 @@ const LEGACY_STORAGE_KEY = 'social-skill-game-state';
 const ACTIVE_SESSION_KEY = 'social-skill-active-session';
 const ACCOUNT_STATE_PREFIX = 'social-skill-account-state:';
 const LOCAL_CACHE_KEY = 'social-skill-cloud-cache';
+const GUEST_SESSION_KEY = 'social-skill-guest-session';
 
 // Initialize relationships for all characters
 const initializeRelationships = (): Record<string, RelationshipState> => {
@@ -66,6 +67,7 @@ interface Store extends GameState {
   hydrationError: string | null;
   storageMode: 'postgres' | 'memory' | null;
   initializeSession: () => Promise<void>;
+  enterGuestMode: () => void;
   setCurrentCharacter: (characterId: string) => void;
   addMessage: (characterId: string, message: Message) => void;
   updateTrustLevel: (
@@ -101,7 +103,7 @@ export const useGameStore = create<Store>((set) => ({
   currentCharacterId: null,
   relationships: initializeRelationships(),
   conversationHistory: [],
-  isHydrating: true,
+  isHydrating: false,
   hydrationError: null,
   storageMode: null,
 
@@ -140,6 +142,28 @@ export const useGameStore = create<Store>((set) => ({
       });
     }
   },
+
+  enterGuestMode: () =>
+    set(() => {
+      const session: UserSession = {
+        mode: 'guest',
+        userId: `guest_${Date.now()}`,
+        displayName: '游客',
+        authProvider: 'guest',
+        createdAt: Date.now(),
+      };
+      sessionStorage.setItem(GUEST_SESSION_KEY, JSON.stringify(session));
+      return {
+        session,
+        userProfile: null,
+        currentCharacterId: null,
+        relationships: initializeRelationships(),
+        conversationHistory: [],
+        isHydrating: false,
+        hydrationError: null,
+        storageMode: null,
+      };
+    }),
 
   setCurrentCharacter: (characterId: string) =>
     set((state) => {
@@ -454,7 +478,7 @@ let pendingState: GameState | null = null;
 let saveChain = Promise.resolve();
 
 const saveToStorage = (state: GameState) => {
-  if (!state.session) return;
+  if (!state.session || state.session.mode !== 'account') return;
   const snapshot = toGameState(state);
   try {
     localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(snapshot));

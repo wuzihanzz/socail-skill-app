@@ -115,22 +115,13 @@ const Home: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="mt-5 grid grid-cols-[76px_1fr] gap-4">
-                  <div className="h-24 w-[76px] overflow-hidden rounded-[18px] bg-white">
-                    <PixelAvatar
-                      characterId={featured.character.id}
-                      emotion={featured.relationship?.currentEmotion ?? 'neutral'}
-                      name={featured.character.name}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="line-clamp-2 text-sm font-semibold leading-6" style={{ color: theme.muted }}>
-                      {featured.character.signature || featured.character.background}
-                    </p>
-                    <p className="mt-3 text-xs font-black uppercase" style={{ color: theme.accent }}>
-                      {featuredStatus}
-                    </p>
-                  </div>
+                <div className="mt-5 border-t border-black/5 pt-4">
+                  <p className="line-clamp-2 text-sm font-semibold leading-6" style={{ color: theme.muted }}>
+                    {featured.character.signature || featured.character.background}
+                  </p>
+                  <p className="mt-2 text-xs font-black uppercase" style={{ color: theme.accent }}>
+                    {featuredStatus}
+                  </p>
                 </div>
               </div>
 
@@ -161,11 +152,12 @@ const Home: React.FC = () => {
                         color: isSelected ? '#fff' : theme.ink,
                       }}
                     >
-                      <div className="mx-auto h-12 w-9 overflow-hidden rounded-[8px] bg-white">
+                      <div className="mx-auto h-14 w-14 overflow-hidden rounded-[12px] bg-white">
                         <PixelAvatar
                           characterId={character.id}
                           emotion={relationship?.currentEmotion ?? 'neutral'}
                           name={character.name}
+                          framing="face"
                         />
                       </div>
                       <p className="mt-2 truncate text-center text-[10px] font-black">{character.nickname}</p>

@@ -168,14 +168,14 @@ export interface MemoryDiaryEntry {
   emotion: 'neutral' | 'happy' | 'upset';
 }
 
-export type UserSessionMode = 'account';
+export type UserSessionMode = 'account' | 'guest';
 
 export interface UserSession {
   mode: UserSessionMode;
   userId: string;
   displayName: string;
   email?: string;
-  authProvider: 'server-anonymous' | 'linked';
+  authProvider: 'server-anonymous' | 'linked' | 'guest';
   createdAt: number;
 }
 

@@ -637,12 +637,13 @@ const Chat: React.FC = () => {
             返回
           </button>
 
-          <div className="relative h-16 w-14 flex-shrink-0 overflow-visible rounded-[14px] bg-[#eef3ed]">
+          <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-[16px] bg-[#eef3ed]">
             <PixelAvatar
               characterId={character.id}
               emotion={relationship.currentEmotion}
               state={visualState}
               name={character.name}
+              framing="face"
             />
             {visualState === 'thinking' && (
               <span className="absolute -right-1 top-1 flex gap-0.5" aria-hidden="true">
@@ -690,12 +691,13 @@ const Chat: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-4 py-5">
         {!hasMessages && (
           <div className="mx-auto mt-10 flex max-w-xs flex-col items-center text-center">
-            <div className="mb-4 h-32 w-24 overflow-visible rounded-[18px] bg-white/70 shadow-sm">
+            <div className="mb-4 h-28 w-28 overflow-hidden rounded-[24px] bg-white/70 shadow-sm">
               <PixelAvatar
                 characterId={character.id}
                 emotion="neutral"
                 state={visualState}
                 name={character.name}
+                framing="face"
               />
             </div>
             <p className="mb-1 text-sm font-black text-[#1f3128]">{character.nickname}</p>

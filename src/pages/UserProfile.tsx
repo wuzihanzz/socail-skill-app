@@ -17,6 +17,7 @@ const factTypes: Array<{ type: ProfileFactType; label: string }> = [
 const UserProfile: React.FC = () => {
   const navigate = useNavigate();
   const {
+    session,
     userProfile,
     upsertUserProfileFact,
     deleteUserProfileFact,
@@ -41,6 +42,44 @@ const UserProfile: React.FC = () => {
     setType(fact.type);
     setValue(fact.value);
   };
+
+  if (session?.mode === 'guest') {
+    return (
+      <div className="min-h-screen bg-[#eef3ed] text-[#1f3128]">
+        <header className="border-b border-[#d9e4dc] bg-[#fbfdf8]/90 backdrop-blur">
+          <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-4 sm:px-6">
+            <button
+              onClick={() => navigate('/')}
+              className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold"
+            >
+              返回
+            </button>
+            <div>
+              <h1 className="font-black">我的画像</h1>
+              <p className="text-xs font-semibold text-[#66756b]">游客模式不会形成长期画像</p>
+            </div>
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+          <section className="rounded-[24px] bg-white p-5 text-center shadow-sm sm:p-8">
+            <p className="text-xs font-black uppercase text-[#4f735f]">guest mode</p>
+            <h2 className="mt-3 text-2xl font-black">他们还不能长期记住你</h2>
+            <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-7 text-[#66756b]">
+              当前聊天只用于快速体验。开启记忆后，角色关系、用户画像和聊天中的重要片段才会持续保存。
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="mt-6 rounded-full bg-[#1f3128] px-6 py-3 text-sm font-black text-white"
+            >
+              开启关系记忆
+            </button>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#eef3ed] text-[#1f3128]">

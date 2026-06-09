@@ -6,6 +6,7 @@ interface PixelAvatarProps {
   emotion: 'neutral' | 'happy' | 'upset';
   name: string;
   state?: CharacterVisualState;
+  framing?: 'face' | 'bust';
 }
 
 export type CharacterVisualState =
@@ -43,17 +44,31 @@ const PixelAvatar: React.FC<PixelAvatarProps> = ({
   emotion,
   name,
   state,
+  framing = 'bust',
 }) => {
   if (!supportedCharacters.has(characterId)) return null;
   const visualState = state ?? emotion;
+  const isEditorial = characterId === 'chen-wei';
+  const assetRoot = framing === 'face'
+    ? `/characters/${characterId}/portrait`
+    : isEditorial
+      ? `/characters/${characterId}/editorial`
+      : `/characters/${characterId}`;
+  const assetExtension = framing === 'face' || isEditorial ? 'webp' : 'png';
 
   return (
-    <img
-      className={`pixel-avatar ${characterId} ${visualState}`}
-      src={`/characters/${characterId}/${assetState[visualState]}.png`}
-      alt={`${name}，${stateLabel[visualState]}`}
-      draggable={false}
-    />
+    <span
+      className={`pixel-avatar ${characterId} ${visualState} framing-${framing} ${
+        isEditorial ? 'is-editorial' : 'is-rendered'
+      }`}
+    >
+      <img
+        className="pixel-avatar__image"
+        src={`${assetRoot}/${assetState[visualState]}.${assetExtension}`}
+        alt={`${name}，${stateLabel[visualState]}`}
+        draggable={false}
+      />
+    </span>
   );
 };
 

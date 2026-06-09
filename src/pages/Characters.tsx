@@ -51,12 +51,13 @@ const Characters: React.FC = () => {
                 </span>
               </div>
 
-              <div className="mt-5 grid grid-cols-[76px_1fr] gap-4">
-                <div className="h-24 w-[76px] overflow-hidden rounded-[18px] bg-white">
+              <div className="mt-5 grid grid-cols-[80px_1fr] gap-4">
+                <div className="h-20 w-20 overflow-hidden rounded-[18px] bg-white">
                   <PixelAvatar
                     characterId={selectedCharacter.id}
                     emotion={selectedRelationship?.currentEmotion ?? 'neutral'}
                     name={selectedCharacter.name}
+                    framing="face"
                   />
                 </div>
                 <div className="min-w-0">
@@ -110,11 +111,12 @@ const Characters: React.FC = () => {
                       : 'border-[#eef3ed] bg-[#fbfdf8] text-[#1f3128] hover:border-[#d9e4dc]'
                   }`}
                 >
-                  <div className="h-16 w-12 flex-shrink-0 overflow-hidden rounded-[12px] bg-white">
+                  <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-[14px] bg-white">
                     <PixelAvatar
                       characterId={character.id}
                       emotion={rel?.currentEmotion ?? 'neutral'}
                       name={character.name}
+                      framing="face"
                     />
                   </div>
 
