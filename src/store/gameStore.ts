@@ -18,13 +18,12 @@ import {
   mergeProfileFacts,
   upsertManualProfileFact,
 } from '../engine/userProfileEngine';
+import { bootstrapAnonymousSession, saveCloudState } from '../lib/accountApi';
 
 const LEGACY_STORAGE_KEY = 'social-skill-game-state';
 const ACTIVE_SESSION_KEY = 'social-skill-active-session';
-const GUEST_SESSION_KEY = 'social-skill-guest-session';
 const ACCOUNT_STATE_PREFIX = 'social-skill-account-state:';
-
-const getAccountStateKey = (userId: string): string => `${ACCOUNT_STATE_PREFIX}${userId}`;
+const LOCAL_CACHE_KEY = 'social-skill-cloud-cache';
 
 // Initialize relationships for all characters
 const initializeRelationships = (): Record<string, RelationshipState> => {
@@ -63,9 +62,10 @@ const initializeRelationships = (): Record<string, RelationshipState> => {
 };
 
 interface Store extends GameState {
-  loginWithAuthenticatedUser: (userId: string, email: string, displayName?: string) => void;
-  enterGuestMode: () => void;
-  logout: () => void;
+  isHydrating: boolean;
+  hydrationError: string | null;
+  storageMode: 'postgres' | 'memory' | null;
+  initializeSession: () => Promise<void>;
   setCurrentCharacter: (characterId: string) => void;
   addMessage: (characterId: string, message: Message) => void;
   updateTrustLevel: (
@@ -92,7 +92,6 @@ interface Store extends GameState {
     characterId: string,
     field: 'name' | 'age' | 'job' | 'mbti' | 'zodiac'
   ) => void;
-  loadFromStorage: () => void;
   resetCharacterRelationship: (characterId: string) => void;
 }
 
@@ -102,66 +101,45 @@ export const useGameStore = create<Store>((set) => ({
   currentCharacterId: null,
   relationships: initializeRelationships(),
   conversationHistory: [],
+  isHydrating: true,
+  hydrationError: null,
+  storageMode: null,
 
-  loginWithAuthenticatedUser: (userId: string, email: string, displayName?: string) =>
-    set(() => {
-      sessionStorage.removeItem(GUEST_SESSION_KEY);
-      const now = Date.now();
-      const cleanName = displayName?.trim() || email.split('@')[0] || '练习者';
-      const session: UserSession = {
-        mode: 'account',
-        userId,
-        displayName: cleanName,
-        email,
-        authProvider: 'supabase',
-        createdAt: now,
-      };
-      const existingState = loadAccountState(session);
-      if (existingState) {
-        localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(existingState.session));
-        return existingState;
-      }
-      const newState: GameState = {
-        session,
-        userProfile: createUserProfile(userId, cleanName),
-        currentCharacterId: null,
-        relationships: initializeRelationships(),
-        conversationHistory: [],
-      };
-      saveToStorage(newState);
-      return newState;
-    }),
+  initializeSession: async () => {
+    set({ isHydrating: true, hydrationError: null });
+    try {
+      const response = await bootstrapAnonymousSession();
+      const session = response.session;
+      const remoteState = response.state
+        ? normalizeStoredState({ ...response.state, session })
+        : null;
+      const migratedState = remoteState ?? loadLegacyState(session);
+      const initialState =
+        migratedState ??
+        normalizeStoredState({
+          session,
+          userProfile: createUserProfile(session.userId, session.displayName),
+          currentCharacterId: null,
+          relationships: initializeRelationships(),
+          conversationHistory: [],
+        });
 
-  enterGuestMode: () =>
-    set(() => {
-      const session: UserSession = {
-        mode: 'guest',
-        userId: `guest_${Date.now()}`,
-        displayName: '游客',
-        createdAt: Date.now(),
-      };
-      sessionStorage.setItem(GUEST_SESSION_KEY, JSON.stringify(session));
-      return {
-        session,
-        userProfile: null,
-        currentCharacterId: null,
-        relationships: initializeRelationships(),
-        conversationHistory: [],
-      };
-    }),
-
-  logout: () =>
-    set(() => {
-      localStorage.removeItem(ACTIVE_SESSION_KEY);
-      sessionStorage.removeItem(GUEST_SESSION_KEY);
-      return {
-        session: null,
-        userProfile: null,
-        currentCharacterId: null,
-        relationships: initializeRelationships(),
-        conversationHistory: [],
-      };
-    }),
+      set({
+        ...initialState,
+        isHydrating: false,
+        hydrationError: null,
+        storageMode: response.storage,
+      });
+      saveToStorage(initialState);
+      clearLegacySessionKeys();
+    } catch (error) {
+      console.error('Failed to initialize server identity:', error);
+      set({
+        isHydrating: false,
+        hydrationError: '暂时无法连接到身份服务，请稍后刷新重试。',
+      });
+    }
+  },
 
   setCurrentCharacter: (characterId: string) =>
     set((state) => {
@@ -428,44 +406,6 @@ export const useGameStore = create<Store>((set) => ({
       return newState;
     }),
 
-  loadFromStorage: () => {
-    const activeSession = readStoredSession();
-    if (activeSession) {
-      const accountState = loadAccountState(activeSession);
-      if (accountState) {
-        set(accountState);
-        return;
-      }
-    }
-
-    const guestSession = readGuestSession();
-    if (guestSession) {
-      set({
-        session: guestSession,
-        userProfile: null,
-        currentCharacterId: null,
-        relationships: initializeRelationships(),
-        conversationHistory: [],
-      });
-      return;
-    }
-
-    const legacyStored = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacyStored) {
-      try {
-        const parsed = JSON.parse(legacyStored) as GameState;
-        const state = normalizeStoredState(parsed);
-        if (state.session?.mode === 'account') {
-          saveToStorage(state);
-          localStorage.removeItem(LEGACY_STORAGE_KEY);
-        }
-        set(state);
-      } catch (e) {
-        console.error('Failed to load from storage:', e);
-      }
-    }
-  },
-
   resetCharacterRelationship: (characterId: string) =>
     set((state) => {
       const character = characters.find((c) => c.id === characterId);
@@ -509,15 +449,32 @@ export const useGameStore = create<Store>((set) => ({
     }),
 }));
 
-// Helper function to save to localStorage
+let saveTimer: number | undefined;
+let pendingState: GameState | null = null;
+let saveChain = Promise.resolve();
+
 const saveToStorage = (state: GameState) => {
-  if (state.session?.mode !== 'account') return;
+  if (!state.session) return;
+  const snapshot = toGameState(state);
   try {
-    localStorage.setItem(getAccountStateKey(state.session.userId), JSON.stringify(state));
-    localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(state.session));
+    localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(snapshot));
   } catch (e) {
-    console.error('Failed to save to storage:', e);
+    console.error('Failed to save local cache:', e);
   }
+
+  pendingState = snapshot;
+  if (saveTimer) window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    const nextState = pendingState;
+    pendingState = null;
+    if (!nextState) return;
+    saveChain = saveChain
+      .then(() => saveCloudState(nextState))
+      .then(() => undefined)
+      .catch((error) => {
+        console.error('Failed to sync state to server:', error);
+      });
+  }, 300);
 };
 
 const normalizeStoredState = (state: GameState): GameState => {
@@ -562,47 +519,47 @@ const normalizeStoredState = (state: GameState): GameState => {
   };
 };
 
-const readGuestSession = (): UserSession | null => {
-  const stored = sessionStorage.getItem(GUEST_SESSION_KEY);
-  if (!stored) return null;
-  try {
-    const session = JSON.parse(stored) as UserSession;
-    return session.mode === 'guest' ? session : null;
-  } catch {
-    sessionStorage.removeItem(GUEST_SESSION_KEY);
-    return null;
+const loadLegacyState = (session: UserSession): GameState | null => {
+  const candidates: Array<string | null> = [localStorage.getItem(LOCAL_CACHE_KEY)];
+  const activeSessionRaw = localStorage.getItem(ACTIVE_SESSION_KEY);
+  if (activeSessionRaw) {
+    try {
+      const activeSession = JSON.parse(activeSessionRaw) as UserSession;
+      candidates.push(
+        localStorage.getItem(`${ACCOUNT_STATE_PREFIX}${activeSession.userId}`)
+      );
+    } catch {
+      // Ignore malformed legacy sessions.
+    }
   }
+  candidates.push(localStorage.getItem(LEGACY_STORAGE_KEY));
+
+  for (const stored of candidates) {
+    if (!stored) continue;
+    try {
+      return normalizeStoredState({
+        ...(JSON.parse(stored) as GameState),
+        session,
+      });
+    } catch {
+      // Try the next legacy format.
+    }
+  }
+  return null;
 };
 
-const readStoredSession = (): UserSession | null => {
-  const stored = localStorage.getItem(ACTIVE_SESSION_KEY);
-  if (!stored) return null;
-  try {
-    const session = JSON.parse(stored) as UserSession;
-    return session.mode === 'account' && session.userId ? session : null;
-  } catch {
-    localStorage.removeItem(ACTIVE_SESSION_KEY);
-    return null;
-  }
+const clearLegacySessionKeys = (): void => {
+  localStorage.removeItem(ACTIVE_SESSION_KEY);
+  sessionStorage.removeItem('social-skill-guest-session');
 };
 
-const loadAccountState = (session: UserSession): GameState | null => {
-  const stored = localStorage.getItem(getAccountStateKey(session.userId));
-  if (!stored) return null;
-  try {
-    const state = normalizeStoredState(JSON.parse(stored) as GameState);
-    return {
-      ...state,
-      session: {
-        ...session,
-        createdAt: state.session?.createdAt ?? session.createdAt,
-      },
-    };
-  } catch (error) {
-    console.error('Failed to load account state:', error);
-    return null;
-  }
-};
+const toGameState = (state: GameState): GameState => ({
+  session: state.session,
+  userProfile: state.userProfile,
+  currentCharacterId: state.currentCharacterId,
+  relationships: state.relationships,
+  conversationHistory: state.conversationHistory,
+});
 
 const normalizeUserProfile = (
   profile: UserProfile | null | undefined,
@@ -629,6 +586,3 @@ const deriveConflictState = (
   if (relationship.repairAttempts >= requiredRepairTurns && delta > 1) return 'none';
   return 'repairing';
 };
-
-// Load from storage on app start
-useGameStore.getState().loadFromStorage();

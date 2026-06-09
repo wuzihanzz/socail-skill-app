@@ -1,0 +1,26 @@
+CREATE TABLE IF NOT EXISTS app_users (
+  id UUID PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS user_states (
+  user_id UUID PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
+  state JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS daily_usage (
+  user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  usage_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  request_count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, usage_date)
+);
+
+CREATE TABLE IF NOT EXISTS daily_ip_usage (
+  ip_hash TEXT NOT NULL,
+  usage_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  request_count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (ip_hash, usage_date)
+);

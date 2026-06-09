@@ -158,14 +158,14 @@ export interface MemoryDiaryEntry {
   emotion: 'neutral' | 'happy' | 'upset';
 }
 
-export type UserSessionMode = 'account' | 'guest';
+export type UserSessionMode = 'account';
 
 export interface UserSession {
   mode: UserSessionMode;
   userId: string;
   displayName: string;
   email?: string;
-  authProvider?: 'supabase' | 'local';
+  authProvider: 'server-anonymous' | 'linked';
   createdAt: number;
 }
 

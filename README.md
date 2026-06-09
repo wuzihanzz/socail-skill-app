@@ -31,9 +31,10 @@
 - 信任度、情绪、已了解信息会随对话变化。
 - Memory Palace 结构记录长期上下文，让角色能在合适的时候记得过去。
 - DeepSeek 调用走服务端 `/api/chat`，避免前端暴露 API key。
-- 服务端有来源限制和基础限流。
+- 首次访问自动获得匿名用户 ID，不需要邮箱或密码。
+- 用户画像、角色关系和长期记忆保存在 Zeabur PostgreSQL。
+- 服务端有来源限制、请求频率限制和用户/IP 每日额度。
 - 首页、角色选择、聊天、档案页已经统一成简洁的关系练习体验。
-- 数据目前保存在浏览器 `localStorage`，无需账号即可使用。
 
 ## 产品原则
 
@@ -74,7 +75,10 @@ cp .env.example .env.local
 
 ```bash
 DEEPSEEK_API_KEY=your-deepseek-api-key-here
+COOKIE_SECRET=replace-with-a-long-random-string
 ```
+
+本地未配置 `DATABASE_URL` 时使用进程内存调试；生产环境请连接 PostgreSQL。
 
 如果只看前端 UI：
 
@@ -103,6 +107,7 @@ npm run start
 - Zustand
 - React Router
 - Express / Vercel Functions
+- PostgreSQL
 - DeepSeek v4-flash
 
 ## 项目结构
@@ -113,10 +118,11 @@ src/
 ├── components/     # PixelAvatar / ChatBubble 等 UI 组件
 ├── data/           # 角色与练习内容
 ├── engine/         # prompt、信任度、记忆、启发生成等核心逻辑
-├── store/          # Zustand 状态和 localStorage 持久化
+├── store/          # Zustand 状态和云端同步
 └── types/          # TypeScript 类型
 
-api/chat.ts         # Vercel Function 版本的服务端代理
+server/             # 匿名身份与 PostgreSQL 数据层
+database/           # 数据库 schema
 server.ts           # Zeabur/本地 Express 服务
 ```
 
@@ -126,10 +132,12 @@ server.ts           # Zeabur/本地 Express 服务
 
 ```bash
 DEEPSEEK_API_KEY=your-deepseek-api-key-here
+DATABASE_URL=postgresql://...
+COOKIE_SECRET=replace-with-a-long-random-string
 ALLOWED_ORIGINS=https://your-domain.example
 ```
 
-Zeabur 使用 `server.ts` 托管前端静态资源和 `/api/chat`。Vercel 使用 `api/chat.ts` 作为 Serverless Function。
+Zeabur 使用 `server.ts` 托管前端静态资源、匿名身份、状态同步和 `/api/chat`。完整配置见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
 ## 说明
 

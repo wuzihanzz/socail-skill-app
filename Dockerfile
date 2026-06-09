@@ -21,6 +21,7 @@ RUN npm install --omit=dev
 # Bring built frontend and the server entry
 COPY --from=builder /app/dist ./dist
 COPY server.ts ./server.ts
+COPY server ./server
 
 # Zeabur/Vercel inject PORT; default to 3000 locally
 EXPOSE 3000

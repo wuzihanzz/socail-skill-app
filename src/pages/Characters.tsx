@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import characters from '../data/characters';
 import { useGameStore } from '../store/gameStore';
@@ -8,10 +8,6 @@ const Characters: React.FC = () => {
   const navigate = useNavigate();
   const { relationships, currentCharacterId, setCurrentCharacter } = useGameStore();
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => currentCharacterId ?? characters[0]?.id);
-
-  useEffect(() => {
-    useGameStore.getState().loadFromStorage();
-  }, []);
 
   const selectedCharacter = characters.find((character) => character.id === selectedCharacterId) ?? characters[0];
   const selectedRelationship = selectedCharacter ? relationships[selectedCharacter.id] : undefined;

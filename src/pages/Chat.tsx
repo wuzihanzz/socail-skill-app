@@ -331,12 +331,13 @@ const Chat: React.FC = () => {
     const promptConflictSummary = trustAnalysis.conflictSummary ?? relationship.lastConflictSummary;
     const unlockedSkills = getUnlockedSkills(character, relationship.trustLevel, relationship.unlockedSkills);
     const hiddenSkills = getHiddenSkills(character, relationship.trustLevel, relationship.unlockedSkills);
-    const memoryContext =
-      session?.mode === 'account'
-        ? buildMemoryContext(relationship.memoryWing, userMessage, relationship.currentEmotion, 6)
-        : '';
-    const userProfileSummary =
-      session?.mode === 'account' ? buildUserProfileSummary(userProfile, 10) : '';
+    const memoryContext = buildMemoryContext(
+      relationship.memoryWing,
+      userMessage,
+      relationship.currentEmotion,
+      6
+    );
+    const userProfileSummary = buildUserProfileSummary(userProfile, 10);
     const systemPrompt = buildSystemPrompt(
       character,
       relationship.trustLevel + trustAnalysis.trustDelta,
@@ -410,20 +411,18 @@ const Chat: React.FC = () => {
                   : relationship.conflictState
                 : 'none';
 
-      if (session?.mode === 'account') {
-        updateMemoryWing(currentCharacterId, (latestRelationship) =>
-          updateMemoryFromTurn(latestRelationship.memoryWing, {
-            characterId: currentCharacterId,
-            characterName: character.nickname,
-            userMessage,
-            assistantMessages: chunks,
-            trustDelta: finalTrustDelta,
-            trustLevel: latestRelationship.trustLevel + finalTrustDelta,
-            emotion: finalEmotion,
-            todayEvent,
-          })
-        );
-      }
+      updateMemoryWing(currentCharacterId, (latestRelationship) =>
+        updateMemoryFromTurn(latestRelationship.memoryWing, {
+          characterId: currentCharacterId,
+          characterName: character.nickname,
+          userMessage,
+          assistantMessages: chunks,
+          trustDelta: finalTrustDelta,
+          trustLevel: latestRelationship.trustLevel + finalTrustDelta,
+          emotion: finalEmotion,
+          todayEvent,
+        })
+      );
 
       const fullText = chunks.join(' ').toLowerCase();
       const zodiacName = character.zodiac
@@ -612,7 +611,7 @@ const Chat: React.FC = () => {
             onClick={() => navigate('/me')}
             className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95"
           >
-            {session?.mode === 'guest' ? '游客' : '画像'}
+            画像
           </button>
 
           <button

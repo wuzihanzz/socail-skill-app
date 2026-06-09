@@ -1,119 +1,85 @@
-# Vercel 部署指南
+# Zeabur 部署
 
-本项目采用了后端API代理架构，用户不需要配置自己的API密钥。
+本项目采用同一个 Zeabur Project 内的两个服务：
 
-## 部署步骤
+- Web Service：React 页面、匿名身份、DeepSeek 代理和状态 API。
+- PostgreSQL：用户画像、角色关系、聊天记录和长期记忆。
 
-### 第1步：推送代码到GitHub
+## 1. 添加 PostgreSQL
 
-```bash
-# 如果还没有初始化Git
-git init
-git add .
-git commit -m "Initial commit: social skill app with API backend"
+在当前 Zeabur Project 中选择 `Add Service`，从 Marketplace 添加 PostgreSQL。
 
-# 添加GitHub远程仓库（替换你的用户名）
-git remote add origin https://github.com/你的用户名/social-skill-app.git
+数据库不需要公开域名。Web Service 会通过 Zeabur Private Networking 访问数据库。
 
-# 推送到GitHub
-git branch -M main
-git push -u origin main
+## 2. 配置 Web Service
+
+在 Web Service 的 Variables 中添加：
+
+```env
+DEEPSEEK_API_KEY=你的-DeepSeek-Key
+DATABASE_URL=${POSTGRES_CONNECTION_STRING}
+COOKIE_SECRET=至少32位的随机字符串
 ```
 
-### 第2步：在Vercel上部署
+PostgreSQL 服务实际暴露的连接变量名称可能不同。可在数据库服务的 Variables 页面复制完整连接字符串，再通过 Zeabur 的 `${变量名}` 引用。
 
-1. 访问 https://vercel.com
-2. 点击 "Sign Up" → 选择 "GitHub" 登录
-3. 授权Vercel访问你的GitHub账户
-4. 点击 "Add New..." → "Project"
-5. 选择 `social-skill-app` 仓库
-6. 点击 "Import"
+`COOKIE_SECRET` 必须长期保持不变。修改它会使已有用户的匿名身份 Cookie 失效。
 
-### 第3步：配置环境变量
+可选配置：
 
-在Vercel项目设置中，找到 "Environment Variables" 部分，添加以下两个变量：
+```env
+ALLOWED_ORIGINS=https://你的正式域名
+CHAT_RATE_LIMIT_MAX=12
+CHAT_RATE_LIMIT_WINDOW_MS=60000
+CHAT_DAILY_LIMIT=200
+CHAT_DAILY_IP_LIMIT=300
+DATABASE_POOL_SIZE=5
+```
 
-| 名称 | 值 | 说明 |
-|------|-----|------|
-| `ANTHROPIC_API_KEY` | 你的API密钥 | 从 `ada-cli-golang.ctripcorp.com` 获取 |
-| `ANTHROPIC_BASE_URL` | `http://ada-cli-golang.ctripcorp.com` | Claude API端点 |
+同项目的 `*.zeabur.internal` PostgreSQL 默认使用私有网络，不需要开启 TLS。其他数据库如需关闭 TLS，可显式设置：
 
-### 第4步：完成部署
+```env
+DATABASE_SSL=false
+```
 
-- 点击 "Deploy"
-- 等待1-3分钟
-- 获得 `*.vercel.app` 链接
+## 3. 自动建表
 
----
+服务启动时会自动创建：
 
-## 本地开发
+- `app_users`
+- `user_states`
+- `daily_usage`
+- `daily_ip_usage`
 
-### 运行本地开发服务器
+建表 SQL 也保存在 `database/schema.sql`，方便手动检查。
+
+## 4. 身份机制
+
+用户首次访问时，服务器会：
+
+1. 创建随机 UUID。
+2. 使用 `COOKIE_SECRET` 签名。
+3. 写入 `HttpOnly + Secure + SameSite=Lax` Cookie。
+4. 将用户状态保存到 PostgreSQL。
+
+前端 JavaScript 无法读取或伪造身份 Cookie。用户未来绑定邮箱、微信或其他登录方式时，应继续沿用这个 UUID，不需要迁移关系数据。
+
+## 5. 本地运行
+
+不配置 `DATABASE_URL` 时，服务会使用进程内存保存状态，适合页面调试：
 
 ```bash
 npm install
-npm run dev
-```
-
-本地开发时使用 `.env.local` 中的API密钥直接调用Claude API（用于测试）。
-
-### 构建生产版本
-
-```bash
 npm run build
-npm run preview
+npm run start
 ```
 
----
+进程重启后内存状态会消失。需要测试真实持久化时，请在 `.env.local` 或终端环境变量中提供 PostgreSQL `DATABASE_URL` 和稳定的 `COOKIE_SECRET`。
 
-## 用户使用
+## 安全边界
 
-1. 朋友们访问你的Vercel链接
-2. 无需配置任何API密钥
-3. 直接开始聊天！
-
-所有API调用都通过你的后端处理，你的API密钥完全保护。
-
----
-
-## 成本说明
-
-- 每次聊天都会消耗**你的** Claude API额度
-- 如果担心成本，可以在Vercel项目设置中配置访问限制
-
----
-
-## 故障排除
-
-### 部署失败
-
-检查环境变量是否正确设置：
-- `ANTHROPIC_API_KEY` 不能为空
-- `ANTHROPIC_BASE_URL` 必须包含完整的协议 (`http://` 或 `https://`)
-
-### 聊天报错
-
-检查Vercel的Function Logs：
-- 项目 → Deployments → 选择最新部署 → Function Logs
-- 查看是否有环境变量或API连接问题
-
----
-
-完成！🎉 你现在可以邀请朋友们使用了。
-# Supabase 邮箱验证码登录
-
-在 Supabase 创建项目后，将以下变量配置到本地 `.env.local` 和部署平台：
-
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
-```
-
-在 Supabase Dashboard 的 Authentication > Email Templates 中，将登录邮件改为包含验证码 token，例如：
-
-```html
-<h2>你的登录验证码</h2>
-<p>{{ .Token }}</p>
-```
-
-Authentication > URL Configuration 中需要加入线上域名和本地调试地址。`anon key` 可以放在浏览器环境变量中，但不要把 `service_role key` 放进前端。
+- DeepSeek Key 只允许放在 Web Service 环境变量中。
+- PostgreSQL 不要暴露公网端口。
+- `/api/chat` 同时按用户和 IP 限流，并有用户及 IP 每日调用上限。
+- IP 只以加盐哈希形式用于额度统计，不保存原始地址。
+- 所有状态写入都校验请求来源和签名身份。

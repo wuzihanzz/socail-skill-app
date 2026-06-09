@@ -17,7 +17,6 @@ const factTypes: Array<{ type: ProfileFactType; label: string }> = [
 const UserProfile: React.FC = () => {
   const navigate = useNavigate();
   const {
-    session,
     userProfile,
     upsertUserProfileFact,
     deleteUserProfileFact,
@@ -26,26 +25,6 @@ const UserProfile: React.FC = () => {
   const [type, setType] = useState<ProfileFactType>('hobby');
   const [value, setValue] = useState('');
   const [editingFact, setEditingFact] = useState<ProfileFact | null>(null);
-
-  if (session?.mode === 'guest') {
-    return (
-      <div className="min-h-screen bg-[#eef3ed] px-4 py-8 text-[#1f3128]">
-        <main className="mx-auto max-w-2xl rounded-[24px] bg-white p-5 shadow-sm">
-          <p className="text-xs font-black uppercase text-[#4f735f]">guest mode</p>
-          <h1 className="mt-2 text-2xl font-black">游客模式不会保存画像</h1>
-          <p className="mt-3 text-sm font-semibold leading-6 text-[#66756b]">
-            你可以继续体验聊天，但系统不会长期保存你的名字、爱好或关系记忆。
-          </p>
-          <button
-            onClick={() => navigate('/')}
-            className="mt-5 rounded-full bg-[#1f3128] px-5 py-2.5 text-sm font-black text-white"
-          >
-            返回首页
-          </button>
-        </main>
-      </div>
-    );
-  }
 
   const facts = userProfile?.facts ?? [];
 
@@ -182,4 +161,3 @@ const UserProfile: React.FC = () => {
 };
 
 export default UserProfile;
-
