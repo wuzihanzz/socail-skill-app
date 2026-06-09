@@ -1,0 +1,38 @@
+src/engine/assistantOutput.ts
+  s_c1698f495389c1::t_9595de25417038 1-19
+src/store/gameStore.ts
+  s_c1698f495389c1::t_9595de25417038 22,76,141,175-193,603
+  s_c1698f495389c1::t_7c4e29ccad3d2d 28-32,112
+src/pages/Chat.tsx
+  s_c1698f495389c1::t_9595de25417038 10,116,418-421
+  s_c1698f495389c1::t_c4380632c9ff82 680
+src/pages/UserProfile.tsx
+  s_c1698f495389c1::t_9595de25417038 23,55-59,112-118,123-129
+  s_c1698f495389c1::t_c4380632c9ff82 2,19,33-39,66,103
+src/lib/sessionKeys.ts
+  s_c1698f495389c1::t_9595de25417038 1-2
+src/components/ChatBubble.tsx
+  s_c1698f495389c1::t_9595de25417038 2,12-13,29
+src/pages/Home.tsx
+  s_c1698f495389c1::t_c4380632c9ff82 64
+src/engine/promptBuilder.ts
+  s_c1698f495389c1::t_9595de25417038 113,197-198
+src/App.tsx
+  s_c1698f495389c1::t_9595de25417038 7,10,24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.10-trip",
+  "base_commit_sha": "5506b26d96962dded2db414726ced66a41f11f43",
+  "prompts": {},
+  "sessions": {
+    "s_c1698f495389c1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e7284-1dd2-7c31-9486-5f29eefb382b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Zihan Wu （吴梓涵） <zihanwu@trip.com>"
+    }
+  }
+}
