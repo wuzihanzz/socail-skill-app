@@ -1,0 +1,23 @@
+src/pages/Chat.tsx
+  s_c1698f495389c1::t_231db2052403d5 241,243,314-341,664-669,672-673,675-676,679,697,701,704,714-731,734,736,740,742,747,797-798,884,888-890,893-894
+index.html
+  s_c1698f495389c1::t_231db2052403d5 6
+src/index.css
+  s_c1698f495389c1::t_231db2052403d5 5-14,17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.10-trip",
+  "base_commit_sha": "2cf25b3397a18efd53f30c5b5603d7a2ed1bbd31",
+  "prompts": {},
+  "sessions": {
+    "s_c1698f495389c1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e7284-1dd2-7c31-9486-5f29eefb382b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Zihan Wu （吴梓涵） <zihanwu@trip.com>"
+    }
+  }
+}
