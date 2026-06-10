@@ -238,7 +238,9 @@ const Chat: React.FC = () => {
   const [speechSupported, setSpeechSupported] = useState(() => Boolean(getSpeechRecognitionConstructor()));
   const [isListening, setIsListening] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const visualTimerRef = useRef<number | null>(null);
 
@@ -308,6 +310,34 @@ const Chat: React.FC = () => {
     const timer = window.setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 0);
     return () => window.clearTimeout(timer);
   }, [relationship, loading]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const updateViewport = () => {
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty('--chat-viewport-height', `${viewportHeight}px`);
+      setIsCompactViewport(viewportHeight < 520);
+    };
+
+    updateViewport();
+    viewport?.addEventListener('resize', updateViewport);
+    viewport?.addEventListener('scroll', updateViewport);
+    window.addEventListener('resize', updateViewport);
+
+    return () => {
+      viewport?.removeEventListener('resize', updateViewport);
+      viewport?.removeEventListener('scroll', updateViewport);
+      window.removeEventListener('resize', updateViewport);
+      document.documentElement.style.removeProperty('--chat-viewport-height');
+    };
+  }, []);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 112)}px`;
+  }, [input]);
 
   useEffect(() => {
     return () => {
@@ -631,17 +661,22 @@ const Chat: React.FC = () => {
   const visibleSelectedTip = conversationTips.some((tip) => tip.id === selectedTip?.id) ? selectedTip : null;
 
   return (
-    <div className="mx-auto flex h-screen w-full max-w-3xl flex-col bg-[#eef3ed] text-[#1f3128]">
-      <header className="flex-shrink-0 border-b border-[#d9e4dc] bg-[#fbfdf8]/90 px-4 pt-3 backdrop-blur">
-        <div className="mb-2.5 flex items-center gap-3">
+    <div
+      className="mx-auto flex h-[100dvh] min-h-0 w-full max-w-3xl flex-col bg-[#eef3ed] text-[#1f3128]"
+      style={{ height: 'var(--chat-viewport-height, 100dvh)' }}
+    >
+      <header className="flex-shrink-0 border-b border-[#d9e4dc] bg-[#fbfdf8]/90 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur sm:px-4">
+        <div className="mb-2 flex items-center gap-2.5 sm:mb-2.5 sm:gap-3">
           <button
             onClick={() => navigate('/characters')}
-            className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95"
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-[#d9e4dc] bg-white text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95 sm:h-auto sm:w-auto sm:px-3 sm:py-1.5"
+            aria-label="返回角色选择"
           >
-            返回
+            <span className="text-lg leading-none sm:hidden">←</span>
+            <span className="hidden sm:inline">返回</span>
           </button>
 
-          <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-[16px] bg-[#eef3ed]">
+          <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-[14px] bg-[#eef3ed] sm:h-16 sm:w-16 sm:rounded-[16px]">
             <PixelAvatar
               characterId={character.id}
               emotion={relationship.currentEmotion}
@@ -659,14 +694,14 @@ const Chat: React.FC = () => {
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-black text-[#1f3128]">{character.nickname}</div>
+            <div className="truncate text-sm font-black text-[#1f3128] sm:text-base">{character.nickname}</div>
             <div className="mt-0.5 truncate text-[10px] font-bold text-[#4f735f]">
               {getVisualStatus(visualState)}
             </div>
-            <div className="mt-0.5 flex items-center gap-2 text-xs text-[#66756b]">
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[#66756b] sm:gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[#4f735f]" />
               <span className="whitespace-nowrap">{trustLabel}</span>
-              <div className="h-1 w-12 flex-shrink-0 overflow-hidden rounded-full bg-[#dce9df]">
+              <div className="h-1 min-w-6 flex-1 overflow-hidden rounded-full bg-[#dce9df] sm:w-12 sm:flex-none">
                 <div
                   className="h-full rounded-full bg-[#4f735f] transition-all duration-500"
                   style={{ width: `${trustLevel}%` }}
@@ -676,23 +711,40 @@ const Chat: React.FC = () => {
             </div>
           </div>
 
+          <div className="hidden items-center gap-2 sm:flex">
+            <button
+              onClick={() => navigate('/me', { state: { returnTo: '/chat' } })}
+              className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95"
+            >
+              画像
+            </button>
+
+            <button
+              onClick={() => navigate('/profile')}
+              className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95"
+            >
+              档案
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pb-2 sm:hidden">
           <button
             onClick={() => navigate('/me', { state: { returnTo: '/chat' } })}
-            className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95"
+            className="rounded-full border border-[#d9e4dc] bg-white py-1.5 text-xs font-bold text-[#405147] transition active:scale-[0.98]"
           >
-            画像
+            我的画像
           </button>
-
           <button
             onClick={() => navigate('/profile')}
-            className="rounded-full border border-[#d9e4dc] bg-white px-3 py-1.5 text-sm font-bold text-[#1f3128] transition hover:border-[#b8cbbb] active:scale-95"
+            className="rounded-full border border-[#d9e4dc] bg-white py-1.5 text-xs font-bold text-[#405147] transition active:scale-[0.98]"
           >
-            档案
+            关系档案
           </button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 py-5">
+      <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-3 py-4 sm:px-4 sm:py-5">
         {!hasMessages && (
           <div className="mx-auto mt-10 flex max-w-xs flex-col items-center text-center">
             <div className="mb-4 h-28 w-28 overflow-hidden rounded-[24px] bg-white/70 shadow-sm">
@@ -742,8 +794,8 @@ const Chat: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="flex-shrink-0 border-t border-[#d9e4dc] bg-[#fbfdf8] px-4 pb-4 pt-3">
-        {conversationTips.length > 0 && !loading && (
+      <div className="flex-shrink-0 border-t border-[#d9e4dc] bg-[#fbfdf8] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 sm:px-4 sm:pb-4 sm:pt-3">
+        {conversationTips.length > 0 && !loading && !isCompactViewport && (
           <div className="mb-3">
             <div className="flex gap-1.5 overflow-x-auto pb-1">
               {conversationTips.map((tip) => (
@@ -829,13 +881,17 @@ const Chat: React.FC = () => {
             </button>
           )}
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKey}
+            onFocus={() => {
+              window.setTimeout(() => messagesEndRef.current?.scrollIntoView({ block: 'end' }), 120);
+            }}
             placeholder={isListening ? '正在听你说话...' : `对 ${character.nickname} 说点什么`}
             disabled={loading}
-            rows={2}
-            className="max-h-28 min-h-11 flex-1 resize-none rounded-[14px] border border-[#d9e4dc] bg-white px-3 py-2.5 text-sm leading-5 text-[#1f3128] placeholder-[#8b968f] transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#4f735f] disabled:opacity-50"
+            rows={1}
+            className="max-h-28 min-h-11 flex-1 resize-none overflow-y-auto rounded-[14px] border border-[#d9e4dc] bg-white px-3 py-2.5 text-base leading-6 text-[#1f3128] placeholder-[#8b968f] transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#4f735f] disabled:opacity-50 sm:text-sm sm:leading-5"
           />
           <button
             onClick={handleSend}
