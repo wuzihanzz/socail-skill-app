@@ -12,17 +12,29 @@ const Login: React.FC = () => {
   const enterWithMemory = async () => {
     if (loading) return;
     setLoading(true);
-    await initializeSession();
-    const session = useGameStore.getState().session;
-    if (session?.mode === 'account') {
-      navigate('/', { replace: true });
+    try {
+      await initializeSession();
+      const session = useGameStore.getState().session;
+      if (session?.mode === 'account') {
+        navigate('/', { replace: true });
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const enterAsGuest = () => {
-    enterGuestMode();
-    navigate('/', { replace: true });
+  const enterAsGuest = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      await enterGuestMode();
+      const session = useGameStore.getState().session;
+      if (session?.mode === 'guest') {
+        navigate('/', { replace: true });
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -79,10 +91,11 @@ const Login: React.FC = () => {
 
           <button
             type="button"
-            onClick={enterAsGuest}
+            onClick={() => void enterAsGuest()}
+            disabled={loading}
             className="w-full rounded-full border border-[#d9e4dc] bg-white px-5 py-3.5 text-sm font-black transition hover:border-[#b8cbbb] active:scale-[0.99]"
           >
-            游客模式快速看看
+            {loading ? '正在准备临时身份' : '游客模式快速看看'}
           </button>
           <p className="mt-3 text-center text-xs font-semibold leading-5 text-[#8b968f]">
             关闭当前标签页后，聊天和记忆不会保留

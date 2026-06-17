@@ -48,20 +48,14 @@ const PixelAvatar: React.FC<PixelAvatarProps> = ({
 }) => {
   if (!supportedCharacters.has(characterId)) return null;
   const visualState = state ?? emotion;
-  const isEditorial = characterId === 'chen-wei';
-  const assetRoot = framing === 'face'
+  const isLegacyWebp = characterId === 'chen-wei';
+  const assetRoot = framing === 'face' && isLegacyWebp
     ? `/characters/${characterId}/portrait`
-    : isEditorial
-      ? `/characters/${characterId}/editorial`
-      : `/characters/${characterId}`;
-  const assetExtension = framing === 'face' || isEditorial ? 'webp' : 'png';
+    : `/characters/${characterId}/editorial`;
+  const assetExtension = isLegacyWebp ? 'webp' : 'svg';
 
   return (
-    <span
-      className={`pixel-avatar ${characterId} ${visualState} framing-${framing} ${
-        isEditorial ? 'is-editorial' : 'is-rendered'
-      }`}
-    >
+    <span className={`pixel-avatar ${characterId} ${visualState} framing-${framing} is-editorial`}>
       <img
         className="pixel-avatar__image"
         src={`${assetRoot}/${assetState[visualState]}.${assetExtension}`}

@@ -17,12 +17,13 @@ function App() {
   const hydrationError = useGameStore((state) => state.hydrationError);
   const initializeSession = useGameStore((state) => state.initializeSession);
   const enterGuestMode = useGameStore((state) => state.enterGuestMode);
+  const logout = useGameStore((state) => state.logout);
 
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
     if (sessionStorage.getItem(GUEST_SESSION_KEY)) {
-      enterGuestMode();
+      void enterGuestMode();
       return;
     }
     if (localStorage.getItem(PERSISTENT_ENTRY_KEY) === 'true') {
@@ -57,6 +58,25 @@ function App() {
           >
             重新连接
           </button>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => void enterGuestMode()}
+              className="rounded-full border border-[#d9e4dc] bg-white px-4 py-2.5 text-sm font-black text-[#1f3128]"
+            >
+              先用游客模式
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                window.location.assign('/login');
+              }}
+              className="rounded-full border border-[#d9e4dc] bg-white px-4 py-2.5 text-sm font-black text-[#1f3128]"
+            >
+              重新开始
+            </button>
+          </div>
         </main>
       </div>
     );

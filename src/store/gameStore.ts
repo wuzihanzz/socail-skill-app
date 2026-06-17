@@ -72,7 +72,7 @@ interface Store extends GameState {
   hydrationError: string | null;
   storageMode: 'postgres' | 'memory' | null;
   initializeSession: () => Promise<void>;
-  enterGuestMode: () => void;
+  enterGuestMode: () => Promise<void>;
   logout: () => void;
   setCurrentCharacter: (characterId: string) => void;
   addMessage: (characterId: string, message: Message) => void;
@@ -150,17 +150,20 @@ export const useGameStore = create<Store>((set) => ({
     }
   },
 
-  enterGuestMode: () =>
-    set(() => {
+  enterGuestMode: async () => {
+    set({ isHydrating: true, hydrationError: null });
+    try {
+      const response = await bootstrapAnonymousSession();
+      const accountSession = response.session;
       const session: UserSession = {
         mode: 'guest',
-        userId: `guest_${Date.now()}`,
+        userId: accountSession.userId,
         displayName: '游客',
         authProvider: 'guest',
-        createdAt: Date.now(),
+        createdAt: accountSession.createdAt,
       };
       sessionStorage.setItem(GUEST_SESSION_KEY, JSON.stringify(session));
-      return {
+      set({
         session,
         userProfile: null,
         currentCharacterId: null,
@@ -168,9 +171,16 @@ export const useGameStore = create<Store>((set) => ({
         conversationHistory: [],
         isHydrating: false,
         hydrationError: null,
-        storageMode: null,
-      };
-    }),
+        storageMode: response.storage,
+      });
+    } catch (error) {
+      console.error('Failed to initialize guest identity:', error);
+      set({
+        isHydrating: false,
+        hydrationError: '暂时无法连接到身份服务，请稍后刷新重试。',
+      });
+    }
+  },
 
   logout: () =>
     set(() => {
