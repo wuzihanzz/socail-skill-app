@@ -56,3 +56,11 @@ export const issueIdentity = (res: Response, existingUserId?: string | null): st
   );
   return userId;
 };
+
+export const clearIdentity = (res: Response): void => {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader(
+    'Set-Cookie',
+    `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
+  );
+};

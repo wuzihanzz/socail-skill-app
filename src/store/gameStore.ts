@@ -18,7 +18,14 @@ import {
   mergeProfileFacts,
   upsertManualProfileFact,
 } from '../engine/userProfileEngine';
-import { bootstrapAnonymousSession, saveCloudState } from '../lib/accountApi';
+import {
+  bootstrapAnonymousSession,
+  loginAccount,
+  logoutAccount,
+  registerAccount,
+  saveCloudState,
+  type SessionResponse,
+} from '../lib/accountApi';
 import { GUEST_SESSION_KEY, PERSISTENT_ENTRY_KEY } from '../lib/sessionKeys';
 
 const LEGACY_STORAGE_KEY = 'social-skill-game-state';
@@ -72,6 +79,8 @@ interface Store extends GameState {
   hydrationError: string | null;
   storageMode: 'postgres' | 'memory' | null;
   initializeSession: () => Promise<void>;
+  loginWithPassword: (email: string, password: string) => Promise<void>;
+  registerWithPassword: (email: string, password: string, displayName: string) => Promise<void>;
   enterGuestMode: () => Promise<void>;
   logout: () => void;
   setCurrentCharacter: (characterId: string) => void;
@@ -117,21 +126,7 @@ export const useGameStore = create<Store>((set) => ({
     set({ isHydrating: true, hydrationError: null });
     try {
       const response = await bootstrapAnonymousSession();
-      const session = response.session;
-      const remoteState = response.state
-        ? normalizeStoredState({ ...response.state, session })
-        : null;
-      const migratedState = remoteState ?? loadLegacyState(session);
-      const initialState =
-        migratedState ??
-        normalizeStoredState({
-          session,
-          userProfile: createUserProfile(session.userId, session.displayName),
-          currentCharacterId: null,
-          relationships: initializeRelationships(),
-          conversationHistory: [],
-        });
-
+      const initialState = getInitialStateFromSessionResponse(response);
       set({
         ...initialState,
         isHydrating: false,
@@ -146,6 +141,54 @@ export const useGameStore = create<Store>((set) => ({
       set({
         isHydrating: false,
         hydrationError: '暂时无法连接到身份服务，请稍后刷新重试。',
+      });
+    }
+  },
+
+  loginWithPassword: async (email: string, password: string) => {
+    set({ isHydrating: true, hydrationError: null });
+    try {
+      const response = await loginAccount(email, password);
+      const initialState = getInitialStateFromSessionResponse(response);
+      set({
+        ...initialState,
+        isHydrating: false,
+        hydrationError: null,
+        storageMode: response.storage,
+      });
+      localStorage.setItem(PERSISTENT_ENTRY_KEY, 'true');
+      sessionStorage.removeItem(GUEST_SESSION_KEY);
+      saveToStorage(initialState);
+      clearLegacySessionKeys();
+    } catch (error) {
+      console.error('Failed to login:', error);
+      set({
+        isHydrating: false,
+        hydrationError: error instanceof Error ? error.message : '登录失败，请稍后重试。',
+      });
+    }
+  },
+
+  registerWithPassword: async (email: string, password: string, displayName: string) => {
+    set({ isHydrating: true, hydrationError: null });
+    try {
+      const response = await registerAccount(email, password, displayName);
+      const initialState = getInitialStateFromSessionResponse(response);
+      set({
+        ...initialState,
+        isHydrating: false,
+        hydrationError: null,
+        storageMode: response.storage,
+      });
+      localStorage.setItem(PERSISTENT_ENTRY_KEY, 'true');
+      sessionStorage.removeItem(GUEST_SESSION_KEY);
+      saveToStorage(initialState);
+      clearLegacySessionKeys();
+    } catch (error) {
+      console.error('Failed to register:', error);
+      set({
+        isHydrating: false,
+        hydrationError: error instanceof Error ? error.message : '注册失败，请稍后重试。',
       });
     }
   },
@@ -184,6 +227,9 @@ export const useGameStore = create<Store>((set) => ({
 
   logout: () =>
     set(() => {
+      void logoutAccount().catch((error) => {
+        console.error('Failed to clear server session:', error);
+      });
       localStorage.removeItem(PERSISTENT_ENTRY_KEY);
       sessionStorage.removeItem(GUEST_SESSION_KEY);
       if (saveTimer) window.clearTimeout(saveTimer);
@@ -512,6 +558,24 @@ export const useGameStore = create<Store>((set) => ({
 let saveTimer: number | undefined;
 let pendingState: GameState | null = null;
 let saveChain = Promise.resolve();
+
+const getInitialStateFromSessionResponse = (response: SessionResponse): GameState => {
+  const session = response.session;
+  const remoteState = response.state
+    ? normalizeStoredState({ ...response.state, session })
+    : null;
+  const migratedState = remoteState ?? loadLegacyState(session);
+  return (
+    migratedState ??
+    normalizeStoredState({
+      session,
+      userProfile: createUserProfile(session.userId, session.displayName),
+      currentCharacterId: null,
+      relationships: initializeRelationships(),
+      conversationHistory: [],
+    })
+  );
+};
 
 const saveToStorage = (state: GameState) => {
   if (!state.session || state.session.mode !== 'account') return;

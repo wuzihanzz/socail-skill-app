@@ -175,7 +175,7 @@ export interface UserSession {
   userId: string;
   displayName: string;
   email?: string;
-  authProvider: 'server-anonymous' | 'linked' | 'guest';
+  authProvider: 'server-anonymous' | 'password' | 'linked' | 'guest';
   createdAt: number;
 }
 

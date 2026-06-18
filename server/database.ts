@@ -7,6 +7,15 @@ export interface StoredUserState {
   updatedAt: number;
 }
 
+export interface AuthAccount {
+  userId: string;
+  email: string;
+  displayName: string;
+  passwordHash: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 interface UserStateRow {
   user_id: string;
   state: unknown | null;
@@ -14,8 +23,18 @@ interface UserStateRow {
   updated_at: Date;
 }
 
+interface AuthAccountRow {
+  user_id: string;
+  email: string;
+  display_name: string;
+  password_hash: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
 const databaseUrl = process.env.DATABASE_URL?.trim();
 const memoryStates = new Map<string, StoredUserState>();
+const memoryAccountsByEmail = new Map<string, AuthAccount>();
 const memoryUserUsage = new Map<string, number>();
 const memoryIpUsage = new Map<string, number>();
 const usesZeaburPrivateNetwork = databaseUrl?.includes('zeabur.internal') ?? false;
@@ -48,6 +67,15 @@ export const initializeDatabase = async (): Promise<void> => {
       last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS auth_accounts (
+      user_id UUID PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
+      email TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS user_states (
       user_id UUID PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
       state JSONB,
@@ -70,6 +98,8 @@ export const initializeDatabase = async (): Promise<void> => {
     );
   `);
 };
+
+const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
 export const ensureUser = async (userId: string): Promise<void> => {
   if (!pool) {
@@ -130,6 +160,105 @@ export const saveUserState = async (userId: string, state: unknown): Promise<num
     [userId, JSON.stringify(state)]
   );
   return result.rows[0].updated_at.getTime();
+};
+
+const mapAccountRow = (row: AuthAccountRow): AuthAccount => ({
+  userId: row.user_id,
+  email: row.email,
+  displayName: row.display_name,
+  passwordHash: row.password_hash,
+  createdAt: row.created_at.getTime(),
+  updatedAt: row.updated_at.getTime(),
+});
+
+export const findAuthAccountByEmail = async (
+  email: string
+): Promise<AuthAccount | null> => {
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!pool) {
+    return memoryAccountsByEmail.get(normalizedEmail) ?? null;
+  }
+
+  const result = await pool.query<AuthAccountRow>(
+    `SELECT user_id, email, display_name, password_hash, created_at, updated_at
+     FROM auth_accounts
+     WHERE email = $1`,
+    [normalizedEmail]
+  );
+  return result.rows[0] ? mapAccountRow(result.rows[0]) : null;
+};
+
+export const findAuthAccountByUserId = async (
+  userId: string
+): Promise<AuthAccount | null> => {
+  if (!pool) {
+    return (
+      [...memoryAccountsByEmail.values()].find((account) => account.userId === userId) ??
+      null
+    );
+  }
+
+  const result = await pool.query<AuthAccountRow>(
+    `SELECT user_id, email, display_name, password_hash, created_at, updated_at
+     FROM auth_accounts
+     WHERE user_id = $1`,
+    [userId]
+  );
+  return result.rows[0] ? mapAccountRow(result.rows[0]) : null;
+};
+
+export const createAuthAccount = async ({
+  userId,
+  email,
+  displayName,
+  passwordHash,
+}: {
+  userId: string;
+  email: string;
+  displayName: string;
+  passwordHash: string;
+}): Promise<AuthAccount> => {
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedDisplayName = displayName.trim() || normalizedEmail.split('@')[0];
+  await ensureUser(userId);
+
+  if (!pool) {
+    if (memoryAccountsByEmail.has(normalizedEmail)) {
+      throw new Error('EMAIL_EXISTS');
+    }
+    const now = Date.now();
+    const account: AuthAccount = {
+      userId,
+      email: normalizedEmail,
+      displayName: normalizedDisplayName,
+      passwordHash,
+      createdAt: now,
+      updatedAt: now,
+    };
+    memoryAccountsByEmail.set(normalizedEmail, account);
+    return account;
+  }
+
+  try {
+    const result = await pool.query<AuthAccountRow>(
+      `INSERT INTO auth_accounts (user_id, email, display_name, password_hash)
+       VALUES ($1, $2, $3, $4)
+       RETURNING user_id, email, display_name, password_hash, created_at, updated_at`,
+      [userId, normalizedEmail, normalizedDisplayName, passwordHash]
+    );
+    return mapAccountRow(result.rows[0]);
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === '23505'
+    ) {
+      throw new Error('EMAIL_EXISTS');
+    }
+    throw error;
+  }
 };
 
 export const consumeDailyRequest = async (

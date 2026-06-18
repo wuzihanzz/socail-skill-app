@@ -2,18 +2,30 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 
+type AuthMode = 'login' | 'register';
+
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const initializeSession = useGameStore((state) => state.initializeSession);
+  const loginWithPassword = useGameStore((state) => state.loginWithPassword);
+  const registerWithPassword = useGameStore((state) => state.registerWithPassword);
   const enterGuestMode = useGameStore((state) => state.enterGuestMode);
   const hydrationError = useGameStore((state) => state.hydrationError);
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const enterWithMemory = async () => {
+  const submitAccount = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (loading) return;
     setLoading(true);
     try {
-      await initializeSession();
+      if (mode === 'login') {
+        await loginWithPassword(email, password);
+      } else {
+        await registerWithPassword(email, password, displayName);
+      }
       const session = useGameStore.getState().session;
       if (session?.mode === 'account') {
         navigate('/', { replace: true });
@@ -44,25 +56,50 @@ const Login: React.FC = () => {
           <div>
             <p className="text-xs font-black uppercase text-[#4f735f]">关系练习室</p>
             <h1 className="mt-5 max-w-md text-4xl font-black leading-[1.12] sm:text-5xl">
-              有些关系，
+              把关系记忆
               <br />
-              值得慢慢认识
+              变成你的产品名片
             </h1>
             <p className="mt-6 max-w-sm text-sm font-semibold leading-7 text-[#66756b]">
-              选择一个角色，从一句自然的话开始。对方会记得你们聊过的事，也会对你的表达产生真实反应。
+              登录后保存长期对话、用户画像和角色记忆。后续可以继续接入 RAG、memory 管理和可视化分析。
             </p>
           </div>
 
           <p className="mt-10 text-xs font-bold leading-5 text-[#6f8276]">
-            你的聊天记录默认只用于维持自己的关系进度。
+            账号体系会把每一段关系进度绑定到稳定身份，方便展示真实的产品闭环。
           </p>
         </section>
 
         <section className="flex flex-col justify-center p-7 sm:p-10">
-          <p className="text-xs font-black uppercase text-[#4f735f]">开始体验</p>
-          <h2 className="mt-3 text-2xl font-black">这次，要不要让他们记住你？</h2>
+          <div className="mb-5 grid grid-cols-2 rounded-full bg-[#eef3ed] p-1">
+            <button
+              type="button"
+              onClick={() => setMode('login')}
+              className={`rounded-full px-4 py-2 text-sm font-black transition ${
+                mode === 'login' ? 'bg-white text-[#1f3128] shadow-sm' : 'text-[#66756b]'
+              }`}
+            >
+              登录
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('register')}
+              className={`rounded-full px-4 py-2 text-sm font-black transition ${
+                mode === 'register' ? 'bg-white text-[#1f3128] shadow-sm' : 'text-[#66756b]'
+              }`}
+            >
+              注册
+            </button>
+          </div>
+
+          <p className="text-xs font-black uppercase text-[#4f735f]">identity layer</p>
+          <h2 className="mt-3 text-2xl font-black">
+            {mode === 'login' ? '回到你的关系记忆' : '创建一个可持久化身份'}
+          </h2>
           <p className="mt-3 text-sm font-semibold leading-6 text-[#66756b]">
-            不需要邮箱或密码。我们会为当前浏览器创建一个匿名身份。
+            {mode === 'login'
+              ? '用邮箱和密码找回已有的聊天、画像和记忆。'
+              : '注册后，当前浏览器里的匿名进度会迁移到这个账号。'}
           </p>
 
           {hydrationError && (
@@ -71,17 +108,52 @@ const Login: React.FC = () => {
             </p>
           )}
 
-          <button
-            type="button"
-            onClick={() => void enterWithMemory()}
-            disabled={loading}
-            className="mt-7 w-full rounded-full bg-[#1f3128] px-5 py-3.5 text-sm font-black text-white transition enabled:hover:bg-[#2d4538] enabled:active:scale-[0.99] disabled:opacity-50"
-          >
-            {loading ? '正在找回练习室' : '进入并保存关系记忆'}
-          </button>
-          <p className="mt-3 text-center text-xs font-semibold leading-5 text-[#7c8b81]">
-            画像、关系进度和长期记忆会持续保存
-          </p>
+          <form className="mt-6 space-y-3" onSubmit={(event) => void submitAccount(event)}>
+            {mode === 'register' && (
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-black text-[#66756b]">昵称</span>
+                <input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder="练习者"
+                  className="w-full rounded-[16px] border border-[#d9e4dc] bg-white px-4 py-3 text-sm font-bold outline-none transition focus:border-[#4f735f] focus:ring-2 focus:ring-[#dce9df]"
+                />
+              </label>
+            )}
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-black text-[#66756b]">邮箱</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+                className="w-full rounded-[16px] border border-[#d9e4dc] bg-white px-4 py-3 text-sm font-bold outline-none transition focus:border-[#4f735f] focus:ring-2 focus:ring-[#dce9df]"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-black text-[#66756b]">密码</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="至少 8 个字符"
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                required
+                minLength={8}
+                className="w-full rounded-[16px] border border-[#d9e4dc] bg-white px-4 py-3 text-sm font-bold outline-none transition focus:border-[#4f735f] focus:ring-2 focus:ring-[#dce9df]"
+              />
+            </label>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-full bg-[#1f3128] px-5 py-3.5 text-sm font-black text-white transition enabled:hover:bg-[#2d4538] enabled:active:scale-[0.99] disabled:opacity-50"
+            >
+              {loading ? '正在验证身份' : mode === 'login' ? '进入并保存关系记忆' : '注册并开始保存'}
+            </button>
+          </form>
 
           <div className="my-6 flex items-center gap-3">
             <span className="h-px flex-1 bg-[#e3ebe5]" />
@@ -93,12 +165,12 @@ const Login: React.FC = () => {
             type="button"
             onClick={() => void enterAsGuest()}
             disabled={loading}
-            className="w-full rounded-full border border-[#d9e4dc] bg-white px-5 py-3.5 text-sm font-black transition hover:border-[#b8cbbb] active:scale-[0.99]"
+            className="w-full rounded-full border border-[#d9e4dc] bg-white px-5 py-3.5 text-sm font-black transition hover:border-[#b8cbbb] active:scale-[0.99] disabled:opacity-50"
           >
             {loading ? '正在准备临时身份' : '游客模式快速看看'}
           </button>
           <p className="mt-3 text-center text-xs font-semibold leading-5 text-[#8b968f]">
-            关闭当前标签页后，聊天和记忆不会保留
+            游客模式只适合快速预览，账号模式才会形成可持续的记忆档案。
           </p>
         </section>
       </main>

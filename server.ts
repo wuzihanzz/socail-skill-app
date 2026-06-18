@@ -1,23 +1,29 @@
 import express from 'express';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import {
   closeDatabase,
+  createAuthAccount,
   consumeDailyIpRequest,
   consumeDailyRequest,
+  findAuthAccountByEmail,
+  findAuthAccountByUserId,
   initializeDatabase,
   isDatabaseConfigured,
   loadUserState,
   saveUserState,
 } from './server/database';
-import { issueIdentity, readUserId } from './server/identity';
+import { clearIdentity, issueIdentity, readUserId } from './server/identity';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '2mb' }));
+
+const scryptAsync = promisify(scrypt);
 
 const defaultAllowedOrigins = [
   'https://social.preview.aliyun-zeabur.cn',
@@ -61,6 +67,57 @@ const hashClientIp = (ip: string): string =>
     .update(`${process.env.IP_HASH_SALT || process.env.COOKIE_SECRET || 'local'}:${ip}`)
     .digest('hex');
 
+const normalizeEmail = (email: unknown): string =>
+  typeof email === 'string' ? email.trim().toLowerCase() : '';
+
+const normalizeDisplayName = (value: unknown, email: string): string => {
+  if (typeof value !== 'string') return email.split('@')[0] || '练习者';
+  const trimmed = value.trim();
+  return trimmed || email.split('@')[0] || '练习者';
+};
+
+const isValidEmail = (email: string): boolean =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 120;
+
+const isValidPassword = (password: unknown): password is string =>
+  typeof password === 'string' && password.length >= 8 && password.length <= 128;
+
+const hashPassword = async (password: string): Promise<string> => {
+  const salt = randomBytes(16).toString('base64url');
+  const derived = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `scrypt:${salt}:${derived.toString('base64url')}`;
+};
+
+const verifyPassword = async (password: string, passwordHash: string): Promise<boolean> => {
+  const [algorithm, salt, hash] = passwordHash.split(':');
+  if (algorithm !== 'scrypt' || !salt || !hash) return false;
+  const expected = Buffer.from(hash, 'base64url');
+  const received = (await scryptAsync(password, salt, expected.length)) as Buffer;
+  return expected.length === received.length && timingSafeEqual(expected, received);
+};
+
+const buildSessionResponse = async (
+  res: express.Response,
+  userId: string,
+  displayName: string,
+  email?: string
+) => {
+  issueIdentity(res, userId);
+  const stored = await loadUserState(userId);
+  return {
+    session: {
+      mode: 'account' as const,
+      userId,
+      displayName,
+      email,
+      authProvider: email ? ('password' as const) : ('server-anonymous' as const),
+      createdAt: stored.createdAt,
+    },
+    state: stored.state,
+    storage: isDatabaseConfigured() ? ('postgres' as const) : ('memory' as const),
+  };
+};
+
 const requireAllowedOrigin = (req: express.Request, res: express.Response): boolean => {
   const origin = req.header('origin');
   if (isAllowedOrigin(origin)) return true;
@@ -86,6 +143,12 @@ const getOrCreateUserId = async (
 app.get('/api/session', async (req, res) => {
   try {
     const userId = await getOrCreateUserId(req, res);
+    const account = await findAuthAccountByUserId(userId);
+    if (account) {
+      return res.json(
+        await buildSessionResponse(res, account.userId, account.displayName, account.email)
+      );
+    }
     const stored = await loadUserState(userId);
     return res.json({
       session: {
@@ -104,6 +167,68 @@ app.get('/api/session', async (req, res) => {
   }
 });
 
+app.post('/api/auth/register', async (req, res) => {
+  if (!requireAllowedOrigin(req, res)) return;
+
+  const email = normalizeEmail(req.body?.email);
+  const displayName = normalizeDisplayName(req.body?.displayName, email);
+  const password = req.body?.password;
+
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: '请输入有效邮箱。' });
+  }
+  if (!isValidPassword(password)) {
+    return res.status(400).json({ error: '密码至少需要 8 个字符。' });
+  }
+  if (displayName.length > 40) {
+    return res.status(400).json({ error: '昵称最多 40 个字符。' });
+  }
+
+  try {
+    const existingUserId = readUserId(req);
+    const userId = existingUserId ?? randomUUID();
+    const account = await createAuthAccount({
+      userId,
+      email,
+      displayName,
+      passwordHash: await hashPassword(password),
+    });
+    return res.json(await buildSessionResponse(res, account.userId, account.displayName, account.email));
+  } catch (error) {
+    if (error instanceof Error && error.message === 'EMAIL_EXISTS') {
+      return res.status(409).json({ error: '这个邮箱已经注册，可以直接登录。' });
+    }
+    console.error('Failed to register account:', error);
+    return res.status(500).json({ error: 'Unable to register account' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  if (!requireAllowedOrigin(req, res)) return;
+
+  const email = normalizeEmail(req.body?.email);
+  const password = req.body?.password;
+  if (!isValidEmail(email) || typeof password !== 'string') {
+    return res.status(400).json({ error: '邮箱或密码不正确。' });
+  }
+
+  try {
+    const account = await findAuthAccountByEmail(email);
+    if (!account || !(await verifyPassword(password, account.passwordHash))) {
+      return res.status(401).json({ error: '邮箱或密码不正确。' });
+    }
+    return res.json(await buildSessionResponse(res, account.userId, account.displayName, account.email));
+  } catch (error) {
+    console.error('Failed to login:', error);
+    return res.status(500).json({ error: 'Unable to login' });
+  }
+});
+
+app.post('/api/auth/logout', (_req, res) => {
+  clearIdentity(res);
+  return res.json({ ok: true });
+});
+
 app.put('/api/state', async (req, res) => {
   if (!requireAllowedOrigin(req, res)) return;
   const userId = readUserId(req);
@@ -118,13 +243,16 @@ app.put('/api/state', async (req, res) => {
   }
 
   try {
+    const account = await findAuthAccountByUserId(userId);
     const updatedAt = await saveUserState(userId, {
       ...state,
       session: {
         ...state.session,
         mode: 'account',
         userId,
-        authProvider: 'server-anonymous',
+        email: account?.email ?? state.session?.email,
+        displayName: account?.displayName ?? state.session?.displayName ?? '练习者',
+        authProvider: account ? 'password' : 'server-anonymous',
       },
     });
     return res.json({ updatedAt });
