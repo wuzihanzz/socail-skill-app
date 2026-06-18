@@ -20,7 +20,7 @@ const ROOM_TYPES = Object.keys(ROOM_LABELS) as MemoryRoomType[];
 const MAX_DRAWERS_PER_ROOM = 24;
 const MAX_DIARY_ENTRIES = 20;
 
-interface MemoryTurnInput {
+export interface MemoryTurnInput {
   characterId: string;
   characterName: string;
   userMessage: string;
@@ -95,72 +95,9 @@ export const normalizeMemoryWing = (
   };
 };
 
-export const updateMemoryFromTurn = (
-  wing: MemoryWing,
-  input: MemoryTurnInput
-): MemoryWing => {
-  const now = Date.now();
-  const nextWing: MemoryWing = {
-    ...wing,
-    rooms: Object.fromEntries(
-      ROOM_TYPES.map((type) => [
-        type,
-        {
-          ...wing.rooms[type],
-          drawers: [...wing.rooms[type].drawers],
-        },
-      ])
-    ) as Record<MemoryRoomType, MemoryRoom>,
-    diary: [...wing.diary],
-    lastVisitedAt: now,
-  };
-
-  const drawers = extractDrawers(input, now);
-  drawers.forEach(({ roomType, drawer }) => {
-    addDrawer(nextWing.rooms[roomType], drawer);
-  });
-
-  const diaryEntry = buildDiaryEntry(input, now);
-  if (diaryEntry) {
-    nextWing.diary = [diaryEntry, ...nextWing.diary].slice(0, MAX_DIARY_ENTRIES);
-  }
-
-  return nextWing;
-};
-
-export const buildMemoryContext = (
-  wing: MemoryWing | undefined,
-  userMessage: string,
-  emotion: 'neutral' | 'happy' | 'upset',
-  limit = 8
-): string => {
-  if (!wing) return '';
-
-  const scored = ROOM_TYPES.flatMap((roomType) =>
-    wing.rooms[roomType].drawers.map((drawer) => ({
-      drawer,
-      roomType,
-      score: scoreDrawer(drawer, roomType, userMessage, emotion),
-    }))
-  )
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
-
-  if (scored.length === 0) return '';
-
-  const grouped = groupByRoom(scored);
-  return Object.entries(grouped)
-    .map(([roomType, items]) => {
-      const lines = items.slice(0, 2).map(({ drawer }) => `- ${drawer.content}`).join('\n');
-      return `### ${ROOM_LABELS[roomType as MemoryRoomType]}\n${lines}`;
-    })
-    .join('\n');
-};
-
-const extractDrawers = (
+export const extractMemoryDrawersFromTurn = (
   input: MemoryTurnInput,
-  now: number
+  now = Date.now()
 ): Array<{ roomType: MemoryRoomType; drawer: MemoryDrawer }> => {
   const results: Array<{ roomType: MemoryRoomType; drawer: MemoryDrawer }> = [];
   const userText = input.userMessage.trim();
@@ -171,7 +108,7 @@ const extractDrawers = (
     results.push({
       roomType: 'user-profile',
       drawer: createDrawer({
-        content: `用户曾说：${quote(userText)}`,
+        content: `用户曾经说：${quote(userText)}`,
         speaker: 'user',
         importance: 4,
         emotionalTone: 'neutral',
@@ -189,7 +126,7 @@ const extractDrawers = (
         speaker: 'user',
         importance: 3,
         emotionalTone: 'neutral',
-        tags,
+        tags: [...tags, 'preference'],
         now,
       }),
     });
@@ -244,7 +181,7 @@ const extractDrawers = (
     results.push({
       roomType: 'shared-events',
       drawer: createDrawer({
-        content: `两人聊到：用户${quote(userText)}，${input.characterName}回应${quote(assistantText)}`,
+        content: `两个人聊到：用户${quote(userText)}，${input.characterName}回应${quote(assistantText)}`,
         speaker: 'assistant',
         importance: input.todayEvent ? 4 : 3,
         emotionalTone: input.trustDelta > 0 ? 'positive' : input.trustDelta < 0 ? 'negative' : 'neutral',
@@ -269,6 +206,68 @@ const extractDrawers = (
   }
 
   return results;
+};
+
+export const updateMemoryFromTurn = (
+  wing: MemoryWing,
+  input: MemoryTurnInput
+): MemoryWing => {
+  const now = Date.now();
+  const nextWing: MemoryWing = {
+    ...wing,
+    rooms: Object.fromEntries(
+      ROOM_TYPES.map((type) => [
+        type,
+        {
+          ...wing.rooms[type],
+          drawers: [...wing.rooms[type].drawers],
+        },
+      ])
+    ) as Record<MemoryRoomType, MemoryRoom>,
+    diary: [...wing.diary],
+    lastVisitedAt: now,
+  };
+
+  extractMemoryDrawersFromTurn(input, now).forEach(({ roomType, drawer }) => {
+    addDrawer(nextWing.rooms[roomType], drawer);
+  });
+
+  const diaryEntry = buildDiaryEntry(input, now);
+  if (diaryEntry) {
+    nextWing.diary = [diaryEntry, ...nextWing.diary].slice(0, MAX_DIARY_ENTRIES);
+  }
+
+  return nextWing;
+};
+
+export const buildMemoryContext = (
+  wing: MemoryWing | undefined,
+  userMessage: string,
+  emotion: 'neutral' | 'happy' | 'upset',
+  limit = 8
+): string => {
+  if (!wing) return '';
+
+  const scored = ROOM_TYPES.flatMap((roomType) =>
+    wing.rooms[roomType].drawers.map((drawer) => ({
+      drawer,
+      roomType,
+      score: scoreDrawer(drawer, roomType, userMessage, emotion),
+    }))
+  )
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  if (scored.length === 0) return '';
+
+  const grouped = groupByRoom(scored);
+  return Object.entries(grouped)
+    .map(([roomType, items]) => {
+      const lines = items.slice(0, 2).map(({ drawer }) => `- ${drawer.content}`).join('\n');
+      return `### ${ROOM_LABELS[roomType as MemoryRoomType]}\n${lines}`;
+    })
+    .join('\n');
 };
 
 const createDrawer = ({
@@ -315,7 +314,7 @@ const buildDiaryEntry = (
     return null;
   }
 
-  const direction = input.trustDelta > 0 ? '更亲近' : input.trustDelta < 0 ? '更疏远' : '关系有变化';
+  const direction = input.trustDelta > 0 ? '更亲近' : input.trustDelta < 0 ? '更疏远' : '有变化';
   const firstPersonContent =
     input.trustDelta < 0
       ? `今天和你有点不愉快。你说了${quote(input.userMessage)}，我当时确实有些受伤，也记住了这次边界被碰到的感觉。`
@@ -340,7 +339,7 @@ const scoreDrawer = (
 ): number => {
   const currentTags = inferTags(userMessage);
   const tagHits = drawer.tags.filter((tag) => currentTags.includes(tag)).length;
-  const asksForMemory = /(还记得|记不记得|上次|之前|我说过|我们聊过|刚才)/.test(userMessage);
+  const asksForMemory = /记得|记不记得|上次|之前|我说过|我们聊过|刚才/.test(userMessage);
   const recency = Math.max(0, 7 - daysSince(drawer.createdAt));
   const recentlyMentionedPenalty =
     drawer.lastMentionedAt && Date.now() - drawer.lastMentionedAt < 10 * 60 * 1000 ? 4 : 0;
@@ -357,9 +356,6 @@ const scoreDrawer = (
   if (emotion === 'upset' && (roomType === 'conflict' || roomType === 'unresolved')) score += 5;
   if (roomType === 'conflict' && drawer.emotionalTone === 'repaired' && asksForMemory) score += 8;
   if (roomType === 'conflict' && drawer.emotionalTone === 'repaired' && currentTags.includes('apology')) score += 6;
-  if (roomType === 'conflict' && /(无聊|垃圾|烦人|傻|白痴|攻击|羞辱|贬低|冒犯)/.test(drawer.content)) {
-    score += 3;
-  }
   if (roomType === 'user-profile' && tagHits > 0) score += 2;
   if (roomType === 'relationship') score += 1;
   return score;
@@ -378,11 +374,11 @@ const groupByRoom = (items: ScoredDrawer[]) =>
 
 const inferTags = (text: string): string[] => {
   const pairs: Array<[string, string[]]> = [
-    ['work', ['工作', '加班', '项目', '案子', '客户', '老板', '同事']],
-    ['family', ['父母', '妈妈', '爸爸', '家庭', '家里']],
-    ['stress', ['压力', '累', '焦虑', '崩溃', '烦']],
+    ['work', ['工作', '加班', '项目', '案子', '客户', '老板', '同事', '简历', '面试']],
+    ['family', ['父母', '妈妈', '爸爸', '家里', '家庭']],
+    ['stress', ['压力', '焦虑', '崩溃', '累', '烦', '难受']],
     ['relationship', ['朋友', '关系', '喜欢', '讨厌', '分手', '恋爱']],
-    ['apology', ['对不起', '抱歉', '不是故意', '误会']],
+    ['apology', ['对不起', '抱歉', '不是故意', '误会', '道歉']],
     ['preference', ['喜欢', '不喜欢', '希望', '不要', '建议', '大道理', '讲道理', '说教']],
   ];
 

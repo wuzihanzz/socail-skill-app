@@ -5,17 +5,20 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import {
   closeDatabase,
-  createAuthAccount,
   consumeDailyIpRequest,
   consumeDailyRequest,
+  createAuthAccount,
   findAuthAccountByEmail,
   findAuthAccountByUserId,
   initializeDatabase,
   isDatabaseConfigured,
+  listMemoryEntries,
   loadUserState,
   saveUserState,
+  upsertMemoryEntries,
 } from './server/database';
 import { clearIdentity, issueIdentity, readUserId } from './server/identity';
+import { buildTextEmbedding, rankMemoryEntries } from './server/memorySearch';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,6 +32,7 @@ const defaultAllowedOrigins = [
   'https://social.preview.aliyun-zeabur.cn',
   'http://localhost:5173',
   'http://localhost:3000',
+  'http://127.0.0.1:3000',
 ];
 const allowedOrigins = new Set(
   (process.env.ALLOWED_ORIGINS?.split(',') ?? defaultAllowedOrigins)
@@ -40,6 +44,8 @@ const maxRequests = Number(process.env.CHAT_RATE_LIMIT_MAX) || 12;
 const dailyRequestLimit = Number(process.env.CHAT_DAILY_LIMIT) || 200;
 const dailyIpRequestLimit = Number(process.env.CHAT_DAILY_IP_LIMIT) || 300;
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+
+const storageMode = () => (isDatabaseConfigured() ? 'postgres' : 'memory');
 
 const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (!origin) return process.env.ALLOW_MISSING_ORIGIN === 'true';
@@ -82,6 +88,18 @@ const isValidEmail = (email: string): boolean =>
 const isValidPassword = (password: unknown): password is string =>
   typeof password === 'string' && password.length >= 8 && password.length <= 128;
 
+const isValidCharacterId = (value: unknown): value is string =>
+  typeof value === 'string' && /^[a-z0-9-]{2,80}$/i.test(value);
+
+const normalizeMemoryTags = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value
+        .filter((tag): tag is string => typeof tag === 'string')
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .slice(0, 12)
+    : [];
+
 const hashPassword = async (password: string): Promise<string> => {
   const salt = randomBytes(16).toString('base64url');
   const derived = (await scryptAsync(password, salt, 64)) as Buffer;
@@ -94,6 +112,18 @@ const verifyPassword = async (password: string, passwordHash: string): Promise<b
   const expected = Buffer.from(hash, 'base64url');
   const received = (await scryptAsync(password, salt, expected.length)) as Buffer;
   return expected.length === received.length && timingSafeEqual(expected, received);
+};
+
+const requireAllowedOrigin = (req: express.Request, res: express.Response): boolean => {
+  const origin = req.header('origin');
+  if (isAllowedOrigin(origin)) return true;
+  console.warn('Rejected request from disallowed origin', {
+    path: req.path,
+    origin,
+    ip: getClientIp(req),
+  });
+  res.status(403).json({ error: 'Forbidden' });
+  return false;
 };
 
 const buildSessionResponse = async (
@@ -114,20 +144,8 @@ const buildSessionResponse = async (
       createdAt: stored.createdAt,
     },
     state: stored.state,
-    storage: isDatabaseConfigured() ? ('postgres' as const) : ('memory' as const),
+    storage: storageMode(),
   };
-};
-
-const requireAllowedOrigin = (req: express.Request, res: express.Response): boolean => {
-  const origin = req.header('origin');
-  if (isAllowedOrigin(origin)) return true;
-  console.warn('Rejected request from disallowed origin', {
-    path: req.path,
-    origin,
-    ip: getClientIp(req),
-  });
-  res.status(403).json({ error: 'Forbidden' });
-  return false;
 };
 
 const getOrCreateUserId = async (
@@ -159,11 +177,11 @@ app.get('/api/session', async (req, res) => {
         createdAt: stored.createdAt,
       },
       state: stored.state,
-      storage: isDatabaseConfigured() ? 'postgres' : 'memory',
+      storage: storageMode(),
     });
   } catch (error) {
     console.error('Failed to initialize anonymous session:', error);
-    return res.status(500).json({ error: 'Unable to initialize session' });
+    return res.status(500).json({ error: '身份服务暂时不可用，请稍后重试。' });
   }
 });
 
@@ -199,7 +217,7 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(409).json({ error: '这个邮箱已经注册，可以直接登录。' });
     }
     console.error('Failed to register account:', error);
-    return res.status(500).json({ error: 'Unable to register account' });
+    return res.status(500).json({ error: '注册失败，请稍后重试。' });
   }
 });
 
@@ -220,7 +238,7 @@ app.post('/api/auth/login', async (req, res) => {
     return res.json(await buildSessionResponse(res, account.userId, account.displayName, account.email));
   } catch (error) {
     console.error('Failed to login:', error);
-    return res.status(500).json({ error: 'Unable to login' });
+    return res.status(500).json({ error: '登录失败，请稍后重试。' });
   }
 });
 
@@ -262,6 +280,75 @@ app.put('/api/state', async (req, res) => {
   }
 });
 
+app.post('/api/memory/entries', async (req, res) => {
+  if (!requireAllowedOrigin(req, res)) return;
+  const userId = readUserId(req);
+  if (!userId) return res.status(401).json({ error: 'Missing or invalid session' });
+
+  const { characterId, entries } = req.body ?? {};
+  if (!isValidCharacterId(characterId) || !Array.isArray(entries)) {
+    return res.status(400).json({ error: 'Invalid memory payload' });
+  }
+
+  const normalized = entries
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => ({
+      id: typeof entry.id === 'string' ? entry.id : undefined,
+      userId,
+      characterId,
+      roomType: typeof entry.roomType === 'string' ? entry.roomType : 'shared-events',
+      content: typeof entry.content === 'string' ? entry.content.trim() : '',
+      importance: typeof entry.importance === 'number' ? entry.importance : 3,
+      tags: normalizeMemoryTags(entry.tags),
+      source:
+        entry.source === 'system' || entry.source === 'manual' || entry.source === 'conversation'
+          ? entry.source
+          : ('conversation' as const),
+      embeddingText:
+        typeof entry.embeddingText === 'string' ? entry.embeddingText.trim() : undefined,
+    }))
+    .filter((entry) => entry.content.length >= 4 && entry.content.length <= 600)
+    .slice(0, 12)
+    .map((entry) => ({
+      ...entry,
+      embedding: buildTextEmbedding(entry.embeddingText ?? entry.content),
+    }));
+
+  try {
+    const saved = await upsertMemoryEntries(normalized);
+    return res.json({
+      entries: saved.map(({ userId: _userId, embedding: _embedding, ...entry }) => entry),
+      storage: storageMode(),
+    });
+  } catch (error) {
+    console.error('Failed to save memory entries:', error);
+    return res.status(500).json({ error: 'Unable to save memory entries' });
+  }
+});
+
+app.post('/api/memory/search', async (req, res) => {
+  if (!requireAllowedOrigin(req, res)) return;
+  const userId = readUserId(req);
+  if (!userId) return res.status(401).json({ error: 'Missing or invalid session' });
+
+  const { characterId, query, limit } = req.body ?? {};
+  if (!isValidCharacterId(characterId) || typeof query !== 'string') {
+    return res.status(400).json({ error: 'Invalid memory search payload' });
+  }
+
+  try {
+    const entries = await listMemoryEntries(userId, characterId, 120);
+    const ranked = rankMemoryEntries(entries, query.slice(0, 1000), Math.min(Number(limit) || 6, 12));
+    return res.json({
+      entries: ranked.map(({ userId: _userId, embedding: _embedding, ...entry }) => entry),
+      storage: storageMode(),
+    });
+  } catch (error) {
+    console.error('Failed to search memory entries:', error);
+    return res.status(500).json({ error: 'Unable to search memory entries' });
+  }
+});
+
 app.post('/api/chat', async (req, res) => {
   const { systemPrompt, userMessage, conversationHistory } = req.body ?? {};
   const origin = req.header('origin');
@@ -282,7 +369,7 @@ app.post('/api/chat', async (req, res) => {
   if (
     typeof systemPrompt !== 'string' ||
     typeof userMessage !== 'string' ||
-    systemPrompt.length > 20_000 ||
+    systemPrompt.length > 24_000 ||
     userMessage.length > 2_000 ||
     (conversationHistory !== undefined && !Array.isArray(conversationHistory)) ||
     (Array.isArray(conversationHistory) &&

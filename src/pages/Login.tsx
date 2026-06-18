@@ -10,6 +10,7 @@ const Login: React.FC = () => {
   const registerWithPassword = useGameStore((state) => state.registerWithPassword);
   const enterGuestMode = useGameStore((state) => state.enterGuestMode);
   const hydrationError = useGameStore((state) => state.hydrationError);
+  const storageMode = useGameStore((state) => state.storageMode);
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -102,6 +103,12 @@ const Login: React.FC = () => {
               : '注册后，当前浏览器里的匿名进度会迁移到这个账号。'}
           </p>
 
+          {storageMode === 'memory' && (
+            <p className="mt-5 rounded-[16px] bg-[#fff8e7] px-4 py-3 text-xs font-bold leading-5 text-[#8a6a1f]">
+              当前后端还在使用临时内存存储。配置 Zeabur Postgres 后，账号和记忆才会在服务重启后保留。
+            </p>
+          )}
+
           {hydrationError && (
             <p className="mt-5 rounded-[16px] bg-[#fff0ed] px-4 py-3 text-xs font-bold leading-5 text-[#a65449]">
               {hydrationError}
@@ -170,7 +177,7 @@ const Login: React.FC = () => {
             {loading ? '正在准备临时身份' : '游客模式快速看看'}
           </button>
           <p className="mt-3 text-center text-xs font-semibold leading-5 text-[#8b968f]">
-            游客模式只适合快速预览，账号模式才会形成可持续的记忆档案。
+            游客模式适合快速预览，账号模式才会形成可持续的记忆档案。
           </p>
         </section>
       </main>

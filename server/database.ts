@@ -16,6 +16,26 @@ export interface AuthAccount {
   updatedAt: number;
 }
 
+export interface MemoryEntryInput {
+  id?: string;
+  userId: string;
+  characterId: string;
+  roomType: string;
+  content: string;
+  importance: number;
+  tags: string[];
+  source: 'conversation' | 'system' | 'manual';
+  embeddingText?: string;
+  embedding?: number[];
+}
+
+export interface MemoryEntry extends MemoryEntryInput {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  score?: number;
+}
+
 interface UserStateRow {
   user_id: string;
   state: unknown | null;
@@ -32,11 +52,27 @@ interface AuthAccountRow {
   updated_at: Date;
 }
 
+interface MemoryEntryRow {
+  id: string;
+  user_id: string;
+  character_id: string;
+  room_type: string;
+  content: string;
+  importance: number;
+  tags: string[];
+  source: 'conversation' | 'system' | 'manual';
+  embedding_text: string | null;
+  embedding: number[] | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
 const databaseUrl = process.env.DATABASE_URL?.trim();
 const memoryStates = new Map<string, StoredUserState>();
 const memoryAccountsByEmail = new Map<string, AuthAccount>();
 const memoryUserUsage = new Map<string, number>();
 const memoryIpUsage = new Map<string, number>();
+const memoryEntries = new Map<string, MemoryEntry>();
 const usesZeaburPrivateNetwork = databaseUrl?.includes('zeabur.internal') ?? false;
 
 const pool = databaseUrl
@@ -96,6 +132,27 @@ export const initializeDatabase = async (): Promise<void> => {
       request_count INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (ip_hash, usage_date)
     );
+
+    CREATE TABLE IF NOT EXISTS memory_entries (
+      id TEXT PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      character_id TEXT NOT NULL,
+      room_type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      importance INTEGER NOT NULL CHECK (importance BETWEEN 1 AND 5),
+      tags TEXT[] NOT NULL DEFAULT '{}',
+      source TEXT NOT NULL DEFAULT 'conversation',
+      embedding_text TEXT,
+      embedding JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS memory_entries_user_character_idx
+      ON memory_entries (user_id, character_id, updated_at DESC);
+
+    CREATE INDEX IF NOT EXISTS memory_entries_tags_idx
+      ON memory_entries USING GIN (tags);
   `);
 };
 
@@ -307,6 +364,120 @@ export const consumeDailyIpRequest = async (
   );
   const used = result.rows[0].request_count;
   return { allowed: used <= limit, used, limit };
+};
+
+const mapMemoryEntryRow = (row: MemoryEntryRow): MemoryEntry => ({
+  id: row.id,
+  userId: row.user_id,
+  characterId: row.character_id,
+  roomType: row.room_type,
+  content: row.content,
+  importance: row.importance,
+  tags: row.tags ?? [],
+  source: row.source,
+  embeddingText: row.embedding_text ?? undefined,
+  embedding: Array.isArray(row.embedding) ? row.embedding : undefined,
+  createdAt: row.created_at.getTime(),
+  updatedAt: row.updated_at.getTime(),
+});
+
+export const upsertMemoryEntries = async (entries: MemoryEntryInput[]): Promise<MemoryEntry[]> => {
+  if (entries.length === 0) return [];
+
+  const normalized = entries.map((entry) => ({
+    ...entry,
+    id:
+      entry.id ??
+      `mem_${entry.userId}_${entry.characterId}_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+    content: entry.content.trim(),
+    tags: Array.from(new Set(entry.tags.map((tag) => tag.trim()).filter(Boolean))).slice(0, 12),
+    importance: Math.max(1, Math.min(5, Math.round(entry.importance))),
+    embeddingText: (entry.embeddingText ?? entry.content).trim(),
+  }));
+
+  for (const entry of normalized) {
+    await ensureUser(entry.userId);
+  }
+
+  if (!pool) {
+    const now = Date.now();
+    const saved = normalized.map<MemoryEntry>((entry) => {
+      const existing = memoryEntries.get(entry.id);
+      const next: MemoryEntry = {
+        ...entry,
+        id: entry.id,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      memoryEntries.set(next.id, next);
+      return next;
+    });
+    return saved;
+  }
+
+  const saved: MemoryEntry[] = [];
+  for (const entry of normalized) {
+    const result = await pool.query<MemoryEntryRow>(
+      `INSERT INTO memory_entries (
+         id, user_id, character_id, room_type, content, importance, tags, source, embedding_text, embedding
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+       ON CONFLICT (id)
+       DO UPDATE SET
+         room_type = EXCLUDED.room_type,
+         content = EXCLUDED.content,
+         importance = EXCLUDED.importance,
+         tags = EXCLUDED.tags,
+         source = EXCLUDED.source,
+         embedding_text = EXCLUDED.embedding_text,
+         embedding = EXCLUDED.embedding,
+         updated_at = NOW()
+       RETURNING id, user_id, character_id, room_type, content, importance, tags, source,
+         embedding_text, embedding, created_at, updated_at`,
+      [
+        entry.id,
+        entry.userId,
+        entry.characterId,
+        entry.roomType,
+        entry.content,
+        entry.importance,
+        entry.tags,
+        entry.source,
+        entry.embeddingText,
+        JSON.stringify(entry.embedding ?? null),
+      ]
+    );
+    saved.push(mapMemoryEntryRow(result.rows[0]));
+  }
+  return saved;
+};
+
+export const listMemoryEntries = async (
+  userId: string,
+  characterId: string,
+  limit = 80
+): Promise<MemoryEntry[]> => {
+  await ensureUser(userId);
+
+  if (!pool) {
+    return [...memoryEntries.values()]
+      .filter((entry) => entry.userId === userId && entry.characterId === characterId)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, limit);
+  }
+
+  const result = await pool.query<MemoryEntryRow>(
+    `SELECT id, user_id, character_id, room_type, content, importance, tags, source,
+       embedding_text, embedding, created_at, updated_at
+     FROM memory_entries
+     WHERE user_id = $1 AND character_id = $2
+     ORDER BY updated_at DESC
+     LIMIT $3`,
+    [userId, characterId, limit]
+  );
+  return result.rows.map(mapMemoryEntryRow);
 };
 
 export const closeDatabase = async (): Promise<void> => {

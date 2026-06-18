@@ -17,8 +17,17 @@ import {
 } from '../engine/trustEngine';
 import { sendMessage } from '../engine/claudeClient';
 import { generateConversationTips, type ConversationTip } from '../engine/conversationHelper';
-import { buildMemoryContext, updateMemoryFromTurn } from '../engine/memoryEngine';
+import {
+  buildMemoryContext,
+  extractMemoryDrawersFromTurn,
+  updateMemoryFromTurn,
+} from '../engine/memoryEngine';
 import { buildUserProfileSummary } from '../engine/userProfileEngine';
+import {
+  formatLongTermMemoryContext,
+  saveLongTermMemories,
+  searchLongTermMemories,
+} from '../lib/memoryApi';
 import {
   createMilestoneEventMessage,
   createMilestoneNotice,
@@ -396,12 +405,22 @@ const Chat: React.FC = () => {
     const promptConflictSummary = trustAnalysis.conflictSummary ?? relationship.lastConflictSummary;
     const unlockedSkills = getUnlockedSkills(character, relationship.trustLevel, relationship.unlockedSkills);
     const hiddenSkills = getHiddenSkills(character, relationship.trustLevel, relationship.unlockedSkills);
-    const memoryContext = buildMemoryContext(
+    const localMemoryContext = buildMemoryContext(
       relationship.memoryWing,
       userMessage,
       relationship.currentEmotion,
       6
     );
+    let memoryContext = localMemoryContext;
+    if (session?.mode === 'account') {
+      try {
+        const longTermMemories = await searchLongTermMemories(currentCharacterId, userMessage, 6);
+        const cloudMemoryContext = formatLongTermMemoryContext(longTermMemories.entries);
+        memoryContext = cloudMemoryContext || localMemoryContext;
+      } catch (error) {
+        console.error('Failed to retrieve long-term memories:', error);
+      }
+    }
     const userProfileSummary = buildUserProfileSummary(userProfile, 10);
     const systemPrompt = buildSystemPrompt(
       character,
@@ -482,18 +501,28 @@ const Chat: React.FC = () => {
       const feedbackVisualState = getFeedbackVisualState(finalTrustDelta);
       setVisualState(feedbackVisualState);
 
+      const memoryInput = {
+        characterId: currentCharacterId,
+        characterName: character.nickname,
+        userMessage,
+        assistantMessages: chunks,
+        trustDelta: finalTrustDelta,
+        trustLevel: relationship.trustLevel + finalTrustDelta,
+        emotion: finalEmotion,
+        todayEvent,
+      };
+      const extractedMemories = extractMemoryDrawersFromTurn(memoryInput);
       updateMemoryWing(currentCharacterId, (latestRelationship) =>
         updateMemoryFromTurn(latestRelationship.memoryWing, {
-          characterId: currentCharacterId,
-          characterName: character.nickname,
-          userMessage,
-          assistantMessages: chunks,
-          trustDelta: finalTrustDelta,
+          ...memoryInput,
           trustLevel: latestRelationship.trustLevel + finalTrustDelta,
-          emotion: finalEmotion,
-          todayEvent,
         })
       );
+      if (session?.mode === 'account' && extractedMemories.length > 0) {
+        void saveLongTermMemories(currentCharacterId, extractedMemories).catch((error) => {
+          console.error('Failed to save long-term memories:', error);
+        });
+      }
 
       const fullText = chunks.join(' ').toLowerCase();
       const zodiacName = character.zodiac
