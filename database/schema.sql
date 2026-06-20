@@ -13,6 +13,19 @@ CREATE TABLE IF NOT EXISTS auth_accounts (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS auth_sessions_user_idx
+  ON auth_sessions (user_id);
+
+CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx
+  ON auth_sessions (expires_at);
+
 CREATE TABLE IF NOT EXISTS user_states (
   user_id UUID PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
   state JSONB,

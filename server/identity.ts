@@ -2,7 +2,9 @@ import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 
 const COOKIE_NAME = 'relation_uid';
+const ACCOUNT_COOKIE_NAME = 'relation_session';
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
+export const ACCOUNT_SESSION_SECONDS = 60 * 60 * 24 * 30;
 const fallbackSecret = randomUUID();
 
 const getSecret = (): string => {
@@ -30,6 +32,16 @@ const parseCookies = (header: string | undefined): Record<string, string> =>
       })
   );
 
+const appendSetCookie = (res: Response, value: string): void => {
+  const existing = res.getHeader('Set-Cookie');
+  const values = Array.isArray(existing)
+    ? existing.map(String)
+    : existing === undefined
+      ? []
+      : [String(existing)];
+  res.setHeader('Set-Cookie', [...values, value]);
+};
+
 const verifySignature = (userId: string, signature: string): boolean => {
   const expected = Buffer.from(sign(userId));
   const received = Buffer.from(signature);
@@ -50,8 +62,8 @@ export const issueIdentity = (res: Response, existingUserId?: string | null): st
   const userId = existingUserId ?? randomUUID();
   const value = encodeURIComponent(`${userId}.${sign(userId)}`);
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader(
-    'Set-Cookie',
+  appendSetCookie(
+    res,
     `${COOKIE_NAME}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${ONE_YEAR_SECONDS}${secure}`
   );
   return userId;
@@ -59,8 +71,27 @@ export const issueIdentity = (res: Response, existingUserId?: string | null): st
 
 export const clearIdentity = (res: Response): void => {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader(
-    'Set-Cookie',
+  appendSetCookie(
+    res,
     `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
+  );
+};
+
+export const readAccountToken = (req: Request): string | null =>
+  parseCookies(req.header('cookie'))[ACCOUNT_COOKIE_NAME] || null;
+
+export const issueAccountIdentity = (res: Response, token: string): void => {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  appendSetCookie(
+    res,
+    `${ACCOUNT_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${ACCOUNT_SESSION_SECONDS}${secure}`
+  );
+};
+
+export const clearAccountIdentity = (res: Response): void => {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  appendSetCookie(
+    res,
+    `${ACCOUNT_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
   );
 };

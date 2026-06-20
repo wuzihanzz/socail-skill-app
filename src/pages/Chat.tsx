@@ -380,13 +380,17 @@ const Chat: React.FC = () => {
       setIsListening(false);
     }
     const userMessage = input.trim();
+    const isFirstMessage = !relationship.firstMessageSent;
+    const previousConversationHistory = relationship.conversationHistory
+      .slice(-12)
+      .map((message) => ({ role: message.role, content: message.content }));
     setInput('');
     setSelectedTip(null);
     setMilestoneNotice(null);
 
     addMessage(currentCharacterId, { role: 'user', content: userMessage, timestamp: Date.now() });
     extractUserProfileFromMessage(userMessage);
-    if (!relationship.firstMessageSent) setFirstMessageSent(currentCharacterId, true);
+    if (isFirstMessage) setFirstMessageSent(currentCharacterId, true);
 
     if (isHarmfulMessage(userMessage)) {
       setVisualState('upset');
@@ -399,7 +403,7 @@ const Chat: React.FC = () => {
       return;
     }
 
-    const trustAnalysis = calculateTrustDelta(userMessage, '', !relationship.firstMessageSent);
+    const trustAnalysis = calculateTrustDelta(userMessage, '', isFirstMessage);
     const promptConflictState =
       trustAnalysis.conflictState !== 'none' ? trustAnalysis.conflictState : relationship.conflictState;
     const promptConflictSummary = trustAnalysis.conflictSummary ?? relationship.lastConflictSummary;
@@ -442,9 +446,7 @@ const Chat: React.FC = () => {
       const aiResponse = await sendMessage(
         systemPrompt,
         userMessage,
-        relationship.conversationHistory
-          .slice(-12)
-          .map((m) => ({ role: m.role, content: m.content }))
+        previousConversationHistory
       );
 
       let chunks: string[] = [];

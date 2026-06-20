@@ -36,6 +36,7 @@ ALLOWED_ORIGINS=https://your-domain.example.com,http://localhost:5173,http://loc
 
 - `app_users`
 - `auth_accounts`
+- `auth_sessions`（保存可撤销登录令牌的 SHA-256 哈希，不保存原始令牌）
 - `user_states`
 - `daily_usage`
 - `daily_ip_usage`

@@ -27,11 +27,15 @@ import {
   type SessionResponse,
 } from '../lib/accountApi';
 import { GUEST_SESSION_KEY, PERSISTENT_ENTRY_KEY } from '../lib/sessionKeys';
+import { parseOwnedCachedState } from '../lib/accountCache';
 
 const LEGACY_STORAGE_KEY = 'social-skill-game-state';
 const ACTIVE_SESSION_KEY = 'social-skill-active-session';
 const ACCOUNT_STATE_PREFIX = 'social-skill-account-state:';
-const LOCAL_CACHE_KEY = 'social-skill-cloud-cache';
+const LEGACY_CLOUD_CACHE_KEY = 'social-skill-cloud-cache';
+const ACCOUNT_CACHE_PREFIX = 'social-skill-cloud-cache:';
+
+const accountCacheKey = (userId: string): string => `${ACCOUNT_CACHE_PREFIX}${userId}`;
 
 const hasStoredEntryChoice = (): boolean =>
   typeof window !== 'undefined' &&
@@ -226,11 +230,15 @@ export const useGameStore = create<Store>((set) => ({
   },
 
   logout: () =>
-    set(() => {
+    set((state) => {
       void logoutAccount().catch((error) => {
         console.error('Failed to clear server session:', error);
       });
       localStorage.removeItem(PERSISTENT_ENTRY_KEY);
+      if (state.session?.userId) {
+        localStorage.removeItem(accountCacheKey(state.session.userId));
+      }
+      localStorage.removeItem(LEGACY_CLOUD_CACHE_KEY);
       sessionStorage.removeItem(GUEST_SESSION_KEY);
       if (saveTimer) window.clearTimeout(saveTimer);
       saveTimer = undefined;
@@ -262,8 +270,12 @@ export const useGameStore = create<Store>((set) => ({
   addMessage: (characterId: string, message: Message) =>
     set((state) => {
       const newRelationships = { ...state.relationships };
-      if (newRelationships[characterId]) {
-        newRelationships[characterId].conversationHistory.push(message);
+      const relationship = newRelationships[characterId];
+      if (relationship) {
+        newRelationships[characterId] = {
+          ...relationship,
+          conversationHistory: [...relationship.conversationHistory, message],
+        };
       }
 
       const newState = {
@@ -399,8 +411,12 @@ export const useGameStore = create<Store>((set) => ({
   setFirstMessageSent: (characterId: string, sent: boolean) =>
     set((state) => {
       const newRelationships = { ...state.relationships };
-      if (newRelationships[characterId]) {
-        newRelationships[characterId].firstMessageSent = sent;
+      const relationship = newRelationships[characterId];
+      if (relationship) {
+        newRelationships[characterId] = {
+          ...relationship,
+          firstMessageSent: sent,
+        };
       }
 
       const newState = {
@@ -581,7 +597,7 @@ const saveToStorage = (state: GameState) => {
   if (!state.session || state.session.mode !== 'account') return;
   const snapshot = toGameState(state);
   try {
-    localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(snapshot));
+    localStorage.setItem(accountCacheKey(state.session.userId), JSON.stringify(snapshot));
   } catch (e) {
     console.error('Failed to save local cache:', e);
   }
@@ -644,7 +660,10 @@ const normalizeStoredState = (state: GameState): GameState => {
 };
 
 const loadLegacyState = (session: UserSession): GameState | null => {
-  const candidates: Array<string | null> = [localStorage.getItem(LOCAL_CACHE_KEY)];
+  const candidates: Array<string | null> = [
+    localStorage.getItem(accountCacheKey(session.userId)),
+    localStorage.getItem(LEGACY_CLOUD_CACHE_KEY),
+  ];
   const activeSessionRaw = localStorage.getItem(ACTIVE_SESSION_KEY);
   if (activeSessionRaw) {
     try {
@@ -660,9 +679,11 @@ const loadLegacyState = (session: UserSession): GameState | null => {
 
   for (const stored of candidates) {
     if (!stored) continue;
+    const parsed = parseOwnedCachedState(stored, session.userId);
+    if (!parsed) continue;
     try {
       return normalizeStoredState({
-        ...(JSON.parse(stored) as GameState),
+        ...parsed,
         session,
       });
     } catch {

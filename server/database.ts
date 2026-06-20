@@ -16,6 +16,11 @@ export interface AuthAccount {
   updatedAt: number;
 }
 
+interface AuthSession {
+  userId: string;
+  expiresAt: number;
+}
+
 export interface MemoryEntryInput {
   id?: string;
   userId: string;
@@ -52,6 +57,11 @@ interface AuthAccountRow {
   updated_at: Date;
 }
 
+interface AuthSessionRow {
+  user_id: string;
+  expires_at: Date;
+}
+
 interface MemoryEntryRow {
   id: string;
   user_id: string;
@@ -70,9 +80,11 @@ interface MemoryEntryRow {
 const databaseUrl = process.env.DATABASE_URL?.trim();
 const memoryStates = new Map<string, StoredUserState>();
 const memoryAccountsByEmail = new Map<string, AuthAccount>();
+const memoryAuthSessions = new Map<string, AuthSession>();
 const memoryUserUsage = new Map<string, number>();
 const memoryIpUsage = new Map<string, number>();
 const memoryEntries = new Map<string, MemoryEntry>();
+const MAX_MEMORY_ENTRIES_PER_CHARACTER = 500;
 const usesZeaburPrivateNetwork = databaseUrl?.includes('zeabur.internal') ?? false;
 
 const pool = databaseUrl
@@ -111,6 +123,19 @@ export const initializeDatabase = async (): Promise<void> => {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS auth_sessions_user_idx
+      ON auth_sessions (user_id);
+
+    CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx
+      ON auth_sessions (expires_at);
 
     CREATE TABLE IF NOT EXISTS user_states (
       user_id UUID PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
@@ -312,10 +337,61 @@ export const createAuthAccount = async ({
       'code' in error &&
       error.code === '23505'
     ) {
-      throw new Error('EMAIL_EXISTS');
+      throw new Error('EMAIL_EXISTS', { cause: error });
     }
     throw error;
   }
+};
+
+export const createAuthSession = async (
+  userId: string,
+  tokenHash: string,
+  expiresAt: number
+): Promise<void> => {
+  await ensureUser(userId);
+
+  if (!pool) {
+    memoryAuthSessions.set(tokenHash, { userId, expiresAt });
+    return;
+  }
+
+  await pool.query('DELETE FROM auth_sessions WHERE expires_at <= NOW()');
+  await pool.query(
+    `INSERT INTO auth_sessions (token_hash, user_id, expires_at)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (token_hash) DO NOTHING`,
+    [tokenHash, userId, new Date(expiresAt)]
+  );
+};
+
+export const findAuthSessionUserId = async (tokenHash: string): Promise<string | null> => {
+  const now = Date.now();
+
+  if (!pool) {
+    const session = memoryAuthSessions.get(tokenHash);
+    if (!session) return null;
+    if (session.expiresAt <= now) {
+      memoryAuthSessions.delete(tokenHash);
+      return null;
+    }
+    return session.userId;
+  }
+
+  const result = await pool.query<AuthSessionRow>(
+    `SELECT user_id, expires_at
+     FROM auth_sessions
+     WHERE token_hash = $1 AND expires_at > NOW()`,
+    [tokenHash]
+  );
+  return result.rows[0]?.user_id ?? null;
+};
+
+export const deleteAuthSession = async (tokenHash: string): Promise<void> => {
+  if (!pool) {
+    memoryAuthSessions.delete(tokenHash);
+    return;
+  }
+  await pool.query('DELETE FROM auth_sessions WHERE token_hash = $1', [tokenHash]);
 };
 
 export const consumeDailyRequest = async (
@@ -404,16 +480,42 @@ export const upsertMemoryEntries = async (entries: MemoryEntryInput[]): Promise<
   if (!pool) {
     const now = Date.now();
     const saved = normalized.map<MemoryEntry>((entry) => {
-      const existing = memoryEntries.get(entry.id);
+      const idMatch = memoryEntries.get(entry.id);
+      if (
+        idMatch &&
+        (idMatch.userId !== entry.userId || idMatch.characterId !== entry.characterId)
+      ) {
+        throw new Error('MEMORY_OWNER_MISMATCH');
+      }
+      const duplicate = [...memoryEntries.values()].find(
+        (candidate) =>
+          candidate.userId === entry.userId &&
+          candidate.characterId === entry.characterId &&
+          candidate.content === entry.content
+      );
+      const existing = duplicate ?? idMatch;
       const next: MemoryEntry = {
         ...entry,
-        id: entry.id,
+        id: existing?.id ?? entry.id,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
       memoryEntries.set(next.id, next);
       return next;
     });
+    for (const entry of normalized) {
+      const owned = [...memoryEntries.values()]
+        .filter(
+          (candidate) =>
+            candidate.userId === entry.userId && candidate.characterId === entry.characterId
+        )
+        .sort((left, right) =>
+          right.importance - left.importance || right.updatedAt - left.updatedAt
+        );
+      owned.slice(MAX_MEMORY_ENTRIES_PER_CHARACTER).forEach((candidate) => {
+        memoryEntries.delete(candidate.id);
+      });
+    }
     return saved;
   }
 
@@ -423,7 +525,14 @@ export const upsertMemoryEntries = async (entries: MemoryEntryInput[]): Promise<
       `INSERT INTO memory_entries (
          id, user_id, character_id, room_type, content, importance, tags, source, embedding_text, embedding
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+       VALUES (
+         COALESCE((
+           SELECT id FROM memory_entries
+           WHERE user_id = $2 AND character_id = $3 AND content = $5
+           LIMIT 1
+         ), $1),
+         $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb
+       )
        ON CONFLICT (id)
        DO UPDATE SET
          room_type = EXCLUDED.room_type,
@@ -434,6 +543,8 @@ export const upsertMemoryEntries = async (entries: MemoryEntryInput[]): Promise<
          embedding_text = EXCLUDED.embedding_text,
          embedding = EXCLUDED.embedding,
          updated_at = NOW()
+       WHERE memory_entries.user_id = EXCLUDED.user_id
+         AND memory_entries.character_id = EXCLUDED.character_id
        RETURNING id, user_id, character_id, room_type, content, importance, tags, source,
          embedding_text, embedding, created_at, updated_at`,
       [
@@ -449,7 +560,25 @@ export const upsertMemoryEntries = async (entries: MemoryEntryInput[]): Promise<
         JSON.stringify(entry.embedding ?? null),
       ]
     );
-    saved.push(mapMemoryEntryRow(result.rows[0]));
+    const row = result.rows[0];
+    if (!row) throw new Error('MEMORY_OWNER_MISMATCH');
+    saved.push(mapMemoryEntryRow(row));
+  }
+  const owners = new Set(normalized.map((entry) => `${entry.userId}:${entry.characterId}`));
+  for (const owner of owners) {
+    const separator = owner.indexOf(':');
+    const userId = owner.slice(0, separator);
+    const characterId = owner.slice(separator + 1);
+    await pool.query(
+      `DELETE FROM memory_entries
+       WHERE id IN (
+         SELECT id FROM memory_entries
+         WHERE user_id = $1 AND character_id = $2
+         ORDER BY importance DESC, updated_at DESC
+         OFFSET $3
+       )`,
+      [userId, characterId, MAX_MEMORY_ENTRIES_PER_CHARACTER]
+    );
   }
   return saved;
 };
@@ -473,7 +602,7 @@ export const listMemoryEntries = async (
        embedding_text, embedding, created_at, updated_at
      FROM memory_entries
      WHERE user_id = $1 AND character_id = $2
-     ORDER BY updated_at DESC
+     ORDER BY importance DESC, updated_at DESC
      LIMIT $3`,
     [userId, characterId, limit]
   );

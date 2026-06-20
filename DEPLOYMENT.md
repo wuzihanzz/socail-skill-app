@@ -47,9 +47,12 @@ DATABASE_SSL=false
 服务启动时会自动创建：
 
 - `app_users`
+- `auth_accounts`
+- `auth_sessions`
 - `user_states`
 - `daily_usage`
 - `daily_ip_usage`
+- `memory_entries`
 
 建表 SQL 也保存在 `database/schema.sql`，方便手动检查。
 
@@ -62,7 +65,7 @@ DATABASE_SSL=false
 3. 写入 `HttpOnly + Secure + SameSite=Lax` Cookie。
 4. 将用户状态保存到 PostgreSQL。
 
-前端 JavaScript 无法读取或伪造身份 Cookie。用户未来绑定邮箱、微信或其他登录方式时，应继续沿用这个 UUID，不需要迁移关系数据。
+注册或登录后，服务器会另外生成 30 天有效的随机账号令牌，只把 SHA-256 哈希保存到 `auth_sessions`。退出时会删除这条会话，因此旧账号 Cookie 无法继续使用。前端 JavaScript 无法读取这些 `HttpOnly` Cookie；匿名身份绑定邮箱后继续沿用原 UUID，不需要迁移关系数据。
 
 ## 5. 本地运行
 
@@ -81,5 +84,6 @@ npm run start
 - DeepSeek Key 只允许放在 Web Service 环境变量中。
 - PostgreSQL 不要暴露公网端口。
 - `/api/chat` 同时按用户和 IP 限流，并有用户及 IP 每日调用上限。
+- 注册、登录、状态写入和记忆写入都有独立频率限制。
 - IP 只以加盐哈希形式用于额度统计，不保存原始地址。
 - 所有状态写入都校验请求来源和签名身份。

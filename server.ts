@@ -8,23 +8,35 @@ import {
   consumeDailyIpRequest,
   consumeDailyRequest,
   createAuthAccount,
+  createAuthSession,
+  deleteAuthSession,
   findAuthAccountByEmail,
   findAuthAccountByUserId,
+  findAuthSessionUserId,
   initializeDatabase,
   isDatabaseConfigured,
   listMemoryEntries,
   loadUserState,
   saveUserState,
   upsertMemoryEntries,
+  type MemoryEntry,
 } from './server/database';
-import { clearIdentity, issueIdentity, readUserId } from './server/identity';
+import {
+  ACCOUNT_SESSION_SECONDS,
+  clearAccountIdentity,
+  clearIdentity,
+  issueAccountIdentity,
+  issueIdentity,
+  readAccountToken,
+  readUserId,
+} from './server/identity';
 import { buildTextEmbedding, rankMemoryEntries } from './server/memorySearch';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '1mb' }));
 
 const scryptAsync = promisify(scrypt);
 
@@ -41,6 +53,12 @@ const allowedOrigins = new Set(
 );
 const windowMs = Number(process.env.CHAT_RATE_LIMIT_WINDOW_MS) || 60_000;
 const maxRequests = Number(process.env.CHAT_RATE_LIMIT_MAX) || 12;
+const authWindowMs = 15 * 60_000;
+const authLoginLimit = Number(process.env.AUTH_LOGIN_RATE_LIMIT) || 12;
+const authRegisterLimit = Number(process.env.AUTH_REGISTER_RATE_LIMIT) || 6;
+const writeWindowMs = 60_000;
+const stateWriteLimit = Number(process.env.STATE_WRITE_RATE_LIMIT) || 60;
+const memoryWriteLimit = Number(process.env.MEMORY_WRITE_RATE_LIMIT) || 30;
 const dailyRequestLimit = Number(process.env.CHAT_DAILY_LIMIT) || 200;
 const dailyIpRequestLimit = Number(process.env.CHAT_DAILY_IP_LIMIT) || 300;
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
@@ -52,26 +70,87 @@ const isAllowedOrigin = (origin: string | undefined): boolean => {
   return allowedOrigins.has(origin);
 };
 
-const getClientIp = (req: express.Request): string => {
-  const forwardedFor = req.header('x-forwarded-for')?.split(',')[0]?.trim();
-  return forwardedFor || req.ip || 'unknown';
-};
+const getClientIp = (req: express.Request): string => req.ip || 'unknown';
 
-const isRateLimited = (key: string): boolean => {
+const isRateLimited = (key: string, limit = maxRequests, durationMs = windowMs): boolean => {
   const now = Date.now();
+  if (rateBuckets.size > 10_000) {
+    for (const [bucketKey, candidate] of rateBuckets) {
+      if (candidate.resetAt <= now) rateBuckets.delete(bucketKey);
+    }
+  }
   const bucket = rateBuckets.get(key);
   if (!bucket || bucket.resetAt <= now) {
-    rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    rateBuckets.set(key, { count: 1, resetAt: now + durationMs });
     return false;
   }
   bucket.count += 1;
-  return bucket.count > maxRequests;
+  return bucket.count > limit;
 };
 
 const hashClientIp = (ip: string): string =>
   createHash('sha256')
     .update(`${process.env.IP_HASH_SALT || process.env.COOKIE_SECRET || 'local'}:${ip}`)
     .digest('hex');
+
+const hashSessionToken = (token: string): string =>
+  createHash('sha256').update(token).digest('hex');
+
+const issueAccountSession = async (res: express.Response, userId: string): Promise<void> => {
+  const token = randomBytes(32).toString('base64url');
+  await createAuthSession(
+    userId,
+    hashSessionToken(token),
+    Date.now() + ACCOUNT_SESSION_SECONDS * 1000
+  );
+  clearIdentity(res);
+  issueAccountIdentity(res, token);
+};
+
+const resolveUserId = async (req: express.Request): Promise<string | null> => {
+  const accountToken = readAccountToken(req);
+  if (accountToken) {
+    const accountUserId = await findAuthSessionUserId(hashSessionToken(accountToken));
+    if (accountUserId) return accountUserId;
+  }
+
+  const anonymousUserId = readUserId(req);
+  if (!anonymousUserId) return null;
+  const account = await findAuthAccountByUserId(anonymousUserId);
+  return account ? null : anonymousUserId;
+};
+
+const requireUserId = async (
+  req: express.Request,
+  res: express.Response
+): Promise<string | null> => {
+  try {
+    const userId = await resolveUserId(req);
+    if (!userId) res.status(401).json({ error: 'Missing or invalid session' });
+    return userId;
+  } catch (error) {
+    console.error('Failed to validate session:', error);
+    res.status(503).json({ error: 'Identity service is temporarily unavailable' });
+    return null;
+  }
+};
+
+const scopeMemoryId = (userId: string, clientId: string): string =>
+  `mem_${createHash('sha256').update(`${userId}\0${clientId}`).digest('hex')}`;
+
+const toPublicMemoryEntry = (entry: MemoryEntry) => ({
+  id: entry.id,
+  characterId: entry.characterId,
+  roomType: entry.roomType,
+  content: entry.content,
+  importance: entry.importance,
+  tags: entry.tags,
+  source: entry.source,
+  embeddingText: entry.embeddingText,
+  createdAt: entry.createdAt,
+  updatedAt: entry.updatedAt,
+  score: entry.score,
+});
 
 const normalizeEmail = (email: unknown): string =>
   typeof email === 'string' ? email.trim().toLowerCase() : '';
@@ -95,7 +174,7 @@ const normalizeMemoryTags = (value: unknown): string[] =>
   Array.isArray(value)
     ? value
         .filter((tag): tag is string => typeof tag === 'string')
-        .map((tag) => tag.trim())
+        .map((tag) => tag.trim().slice(0, 40))
         .filter(Boolean)
         .slice(0, 12)
     : [];
@@ -127,12 +206,10 @@ const requireAllowedOrigin = (req: express.Request, res: express.Response): bool
 };
 
 const buildSessionResponse = async (
-  res: express.Response,
   userId: string,
   displayName: string,
   email?: string
 ) => {
-  issueIdentity(res, userId);
   const stored = await loadUserState(userId);
   return {
     session: {
@@ -152,7 +229,11 @@ const getOrCreateUserId = async (
   req: express.Request,
   res: express.Response
 ): Promise<string> => {
-  const existingUserId = readUserId(req);
+  const candidateUserId = readUserId(req);
+  const existingUserId =
+    candidateUserId && !(await findAuthAccountByUserId(candidateUserId))
+      ? candidateUserId
+      : null;
   const userId = issueIdentity(res, existingUserId);
   await loadUserState(userId);
   return userId;
@@ -160,13 +241,18 @@ const getOrCreateUserId = async (
 
 app.get('/api/session', async (req, res) => {
   try {
-    const userId = await getOrCreateUserId(req, res);
-    const account = await findAuthAccountByUserId(userId);
-    if (account) {
-      return res.json(
-        await buildSessionResponse(res, account.userId, account.displayName, account.email)
-      );
+    const accountToken = readAccountToken(req);
+    if (accountToken) {
+      const accountUserId = await findAuthSessionUserId(hashSessionToken(accountToken));
+      const account = accountUserId ? await findAuthAccountByUserId(accountUserId) : null;
+      if (account) {
+        return res.json(
+          await buildSessionResponse(account.userId, account.displayName, account.email)
+        );
+      }
+      clearAccountIdentity(res);
     }
+    const userId = await getOrCreateUserId(req, res);
     const stored = await loadUserState(userId);
     return res.json({
       session: {
@@ -188,6 +274,11 @@ app.get('/api/session', async (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   if (!requireAllowedOrigin(req, res)) return;
 
+  const ip = getClientIp(req);
+  if (isRateLimited(`auth:register:${ip}`, authRegisterLimit, authWindowMs)) {
+    return res.status(429).json({ error: '注册尝试过于频繁，请稍后再试。' });
+  }
+
   const email = normalizeEmail(req.body?.email);
   const displayName = normalizeDisplayName(req.body?.displayName, email);
   const password = req.body?.password;
@@ -203,7 +294,11 @@ app.post('/api/auth/register', async (req, res) => {
   }
 
   try {
-    const existingUserId = readUserId(req);
+    const anonymousUserId = readUserId(req);
+    const existingUserId =
+      anonymousUserId && !(await findAuthAccountByUserId(anonymousUserId))
+        ? anonymousUserId
+        : null;
     const userId = existingUserId ?? randomUUID();
     const account = await createAuthAccount({
       userId,
@@ -211,7 +306,8 @@ app.post('/api/auth/register', async (req, res) => {
       displayName,
       passwordHash: await hashPassword(password),
     });
-    return res.json(await buildSessionResponse(res, account.userId, account.displayName, account.email));
+    await issueAccountSession(res, account.userId);
+    return res.json(await buildSessionResponse(account.userId, account.displayName, account.email));
   } catch (error) {
     if (error instanceof Error && error.message === 'EMAIL_EXISTS') {
       return res.status(409).json({ error: '这个邮箱已经注册，可以直接登录。' });
@@ -224,6 +320,11 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   if (!requireAllowedOrigin(req, res)) return;
 
+  const ip = getClientIp(req);
+  if (isRateLimited(`auth:login:${ip}`, authLoginLimit, authWindowMs)) {
+    return res.status(429).json({ error: '登录尝试过于频繁，请稍后再试。' });
+  }
+
   const email = normalizeEmail(req.body?.email);
   const password = req.body?.password;
   if (!isValidEmail(email) || typeof password !== 'string') {
@@ -235,22 +336,37 @@ app.post('/api/auth/login', async (req, res) => {
     if (!account || !(await verifyPassword(password, account.passwordHash))) {
       return res.status(401).json({ error: '邮箱或密码不正确。' });
     }
-    return res.json(await buildSessionResponse(res, account.userId, account.displayName, account.email));
+    await issueAccountSession(res, account.userId);
+    return res.json(await buildSessionResponse(account.userId, account.displayName, account.email));
   } catch (error) {
     console.error('Failed to login:', error);
     return res.status(500).json({ error: '登录失败，请稍后重试。' });
   }
 });
 
-app.post('/api/auth/logout', (_req, res) => {
+app.post('/api/auth/logout', async (req, res) => {
+  if (!requireAllowedOrigin(req, res)) return;
+  try {
+    const accountToken = readAccountToken(req);
+    if (accountToken) {
+      await deleteAuthSession(hashSessionToken(accountToken));
+    }
+  } catch (error) {
+    console.error('Failed to revoke account session:', error);
+    return res.status(503).json({ error: '退出失败，请稍后重试。' });
+  }
+  clearAccountIdentity(res);
   clearIdentity(res);
   return res.json({ ok: true });
 });
 
 app.put('/api/state', async (req, res) => {
   if (!requireAllowedOrigin(req, res)) return;
-  const userId = readUserId(req);
-  if (!userId) return res.status(401).json({ error: 'Missing or invalid session' });
+  const userId = await requireUserId(req, res);
+  if (!userId) return;
+  if (isRateLimited(`write:state:${userId}`, stateWriteLimit, writeWindowMs)) {
+    return res.status(429).json({ error: 'State is being updated too frequently' });
+  }
 
   const { state } = req.body ?? {};
   if (!state || typeof state !== 'object' || Array.isArray(state)) {
@@ -282,8 +398,11 @@ app.put('/api/state', async (req, res) => {
 
 app.post('/api/memory/entries', async (req, res) => {
   if (!requireAllowedOrigin(req, res)) return;
-  const userId = readUserId(req);
-  if (!userId) return res.status(401).json({ error: 'Missing or invalid session' });
+  const userId = await requireUserId(req, res);
+  if (!userId) return;
+  if (isRateLimited(`write:memory:${userId}`, memoryWriteLimit, writeWindowMs)) {
+    return res.status(429).json({ error: 'Memory is being updated too frequently' });
+  }
 
   const { characterId, entries } = req.body ?? {};
   if (!isValidCharacterId(characterId) || !Array.isArray(entries)) {
@@ -293,10 +412,16 @@ app.post('/api/memory/entries', async (req, res) => {
   const normalized = entries
     .filter((entry) => entry && typeof entry === 'object')
     .map((entry) => ({
-      id: typeof entry.id === 'string' ? entry.id : undefined,
+      id:
+        typeof entry.id === 'string' && entry.id.length <= 160
+          ? scopeMemoryId(userId, entry.id)
+          : scopeMemoryId(userId, randomUUID()),
       userId,
       characterId,
-      roomType: typeof entry.roomType === 'string' ? entry.roomType : 'shared-events',
+      roomType:
+        typeof entry.roomType === 'string' && entry.roomType.length <= 40
+          ? entry.roomType
+          : 'shared-events',
       content: typeof entry.content === 'string' ? entry.content.trim() : '',
       importance: typeof entry.importance === 'number' ? entry.importance : 3,
       tags: normalizeMemoryTags(entry.tags),
@@ -317,7 +442,7 @@ app.post('/api/memory/entries', async (req, res) => {
   try {
     const saved = await upsertMemoryEntries(normalized);
     return res.json({
-      entries: saved.map(({ userId: _userId, embedding: _embedding, ...entry }) => entry),
+      entries: saved.map(toPublicMemoryEntry),
       storage: storageMode(),
     });
   } catch (error) {
@@ -328,11 +453,11 @@ app.post('/api/memory/entries', async (req, res) => {
 
 app.post('/api/memory/search', async (req, res) => {
   if (!requireAllowedOrigin(req, res)) return;
-  const userId = readUserId(req);
-  if (!userId) return res.status(401).json({ error: 'Missing or invalid session' });
+  const userId = await requireUserId(req, res);
+  if (!userId) return;
 
   const { characterId, query, limit } = req.body ?? {};
-  if (!isValidCharacterId(characterId) || typeof query !== 'string') {
+  if (!isValidCharacterId(characterId) || typeof query !== 'string' || query.length > 2_000) {
     return res.status(400).json({ error: 'Invalid memory search payload' });
   }
 
@@ -340,7 +465,7 @@ app.post('/api/memory/search', async (req, res) => {
     const entries = await listMemoryEntries(userId, characterId, 120);
     const ranked = rankMemoryEntries(entries, query.slice(0, 1000), Math.min(Number(limit) || 6, 12));
     return res.json({
-      entries: ranked.map(({ userId: _userId, embedding: _embedding, ...entry }) => entry),
+      entries: ranked.map(toPublicMemoryEntry),
       storage: storageMode(),
     });
   } catch (error) {
@@ -353,10 +478,10 @@ app.post('/api/chat', async (req, res) => {
   const { systemPrompt, userMessage, conversationHistory } = req.body ?? {};
   const origin = req.header('origin');
   const ip = getClientIp(req);
-  const userId = readUserId(req);
 
   if (!requireAllowedOrigin(req, res)) return;
-  if (!userId) return res.status(401).json({ error: 'Missing or invalid session' });
+  const userId = await requireUserId(req, res);
+  if (!userId) return;
 
   if (isRateLimited(`${userId}:${ip}`)) {
     console.warn('Rate limited /api/chat request', { userId, ip, origin });
