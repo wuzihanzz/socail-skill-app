@@ -87,7 +87,7 @@ function App() {
       <Routes>
         <Route
           path="/login"
-          element={session?.mode === 'account' ? <Navigate to="/" replace /> : <Login />}
+          element={session ? <Navigate to="/" replace /> : <Login />}
         />
         {session ? (
           <>
